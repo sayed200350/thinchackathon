@@ -4,6 +4,16 @@ Taktile track · thinc! hack MUC · 7–8 November 2026
 
 Policy Replay will help a motor-insurance reviewer answer one question when a policy changes: **Which open claims need a second look, and why?** The weekend deliverable is a CSV decision engine and a reviewer app that explains the same decisions.
 
+## Run the reviewer API
+
+From the repository root, start the local service with Python 3.9 or newer:
+
+```sh
+python3 -m backend --ui-origin http://localhost:5173
+```
+
+Open [DEV-001](http://127.0.0.1:8765/api/claims/DEV-001) to read its original decision. Rafik can connect the reviewer screen using the [API contract and correction example](contract/api.md). The [engine guide](engine/README.md) covers the CSV command and [measured v1 results](eval/v1-development.json). Run all tests with `python3 -m unittest discover -v`.
+
 ## Start together
 
 Read the [Taktile brief](Usecase/20261105_Taktile_thinc%21%20Hackathon%20Case%20Study.pdf) and unpack the [participant materials](Usecase/20261105_Taktile_thinc%21%20Hackathon%20Case%20Study%20Material.zip). The pack contains policy v1, 14 labelled development claims, and 12 unlabelled practice claims.
@@ -12,10 +22,10 @@ In the first 15 minutes, agree on one example result containing the case ID, ope
 
 ## Two-agent build plan
 
-| Milestone | Sayed · Rules, CSV & evaluation | Rafik · Reviewer app, business case & demo |
+| Milestone | Sayed · Rules, CSV, evaluation & backend | Rafik · Reviewer app, business case & demo |
 | --- | --- | --- |
-| First working slice | Encode v1 in its specified order and read the official CSV format. Hand Rafik a sample result and a command to reproduce it. | Build the claim list and detail view. Show the decisive facts and clause. Let a reviewer save a correction with their identity, reason, and policy version. Preserve the original recommendation. |
-| Before the Saturday 18:00 rule release | Evaluate v1 against all 14 labels. Check the €1,500 boundary (DEV-010), a blank quote (DEV-013), and a known injury with a blank report field (DEV-014). | Connect the screen to Sayed’s engine and verify that a saved correction survives refresh. Build a cost calculator with editable assumptions for claim volume, staff time, and costs of different errors. |
+| First working slice | Encode v1 in its specified order and read the official CSV format. Give Rafik a sample result, a command to reproduce it, and the API format for reading a decision and saving a reviewer correction. | Build the claim list and detail view. Show the decisive facts and clause. Build the correction form against Sayed’s API and display the original recommendation and audit history. |
+| Before the Saturday 18:00 rule release | Persist reviewer corrections, reviewer identity, reason and policy version in the database alongside the original decision. Evaluate v1 against all 14 labels. Check the €1,500 boundary (DEV-010), a blank quote (DEV-013), and a known injury with a blank report field (DEV-014). | Connect the screen to Sayed’s API and verify that a saved correction survives refresh. Build a cost calculator with editable assumptions for claim volume, staff time, and costs of different errors. |
 | When v2 arrives on Discord | Preserve v1 and implement the published change. Flag affected open claims. For closed claims, retain the v1 recommendation in v2 and set `needs_recheck` to `False`. | Independently work out which sample claims the new clause should affect. Compare with Sayed’s results and build **Preview policy change**, with old and new decisions, the changed clause, and the relevant fact. |
 | Sunday handoff | Deliver the batch command and a quality report for each version. Include counts and denominators for correct routing, incorrect routine routing, and unnecessary human review. Break out changed cases. Own the final merge. | Use the measured error rates to show annual cost before and after, net benefit, payback, and the cost of applying v2. Own the demo and the judge’s live override. |
 

@@ -36,6 +36,8 @@ class PolicyTests(unittest.TestCase):
     def test_invalid_facts_do_not_default_to_false_or_zero(self):
         for field, raw in [("quote_eur", ""), ("quote_eur", "unreadable"), ("quote_eur", "NaN"),
                            ("quote_eur", "Infinity"), ("quote_eur", -1), ("claim_type", "unknown"),
+                           ("quote_eur", "6__50"), ("quote_eur", "_650_"),
+                           ("repair_type", "#VALUE!"), ("claim_type", "#N/A"),
                            ("injury_reported", "perhaps"), ("repair_type", None)]:
             with self.subTest(field=field, raw=raw):
                 result = decide(dict(BASE, **{field: raw}))

@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Optional, TypedDict, Union
 
 
@@ -29,6 +30,7 @@ FIELDS = {
     "duplicate_flag": "duplicate claim flag",
     "evidence_conflict": "evidence conflict status",
 }
+ROUTES = ("routine_processing", "request_information", "human_review")
 REVIEW_FLAGS = {
     "injury_reported": "an injury was reported",
     "liability_disputed": "liability is disputed",
@@ -37,7 +39,9 @@ REVIEW_FLAGS = {
 }
 DOCUMENTS = ("incident_report_present", "itemized_quote_present")
 UNKNOWN = {"", "n/a", "na", "unknown", "unreadable", "null", "none", "nan", "?",
-           "-", "not available", "not provided"}
+           "-", "not available", "not provided", "#value!", "#n/a", "#ref!", "#num!",
+           "#name?", "#div/0!", "#null!"}
+PLAIN_AMOUNT = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)")
 BOOLEAN = {"true": True, "false": False, "1": True, "0": False,
            "yes": True, "no": False}
 
@@ -54,6 +58,8 @@ def _fact(field: str, raw: object) -> Fact:
     if not isinstance(raw, (str, bool, int, float, Decimal)) or text.casefold() in UNKNOWN:
         return None
     if field == "quote_eur":
+        if isinstance(raw, str) and not PLAIN_AMOUNT.fullmatch(text):
+            return None
         try:
             amount = Decimal(text)
         except InvalidOperation:

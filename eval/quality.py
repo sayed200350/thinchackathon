@@ -6,11 +6,9 @@ import csv
 import json
 from pathlib import Path
 
-from engine import decide
+from engine import ROUTES, decide
 from engine.batch import read_claims
 from engine.policy import FIELDS
-
-ROUTES = ("routine_processing", "request_information", "human_review")
 
 
 def score(source: Path) -> dict:

@@ -8,7 +8,7 @@ fi
 PULL=$(GIT_TERMINAL_PROMPT=0 git pull --rebase --autostash 2>&1) || true
 echo "[team] git pull: $(echo "$PULL" | tail -n 1)"
 if [ -z "$PERSON" ]; then
-  echo "[team] TEAM_PERSON nicht gesetzt. Bitte /join <PERSON> ausführen (z. B. /join C)."
+  echo "[team] TEAM_PERSON nicht gesetzt. Bitte /join <PERSON> ausführen (z. B. /join A)."
   exit 0
 fi
 N=$(find "team/inbox/$PERSON" -maxdepth 1 -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
