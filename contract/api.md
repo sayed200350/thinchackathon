@@ -14,6 +14,12 @@ For an offline rehearsal, pass `--store sqlite`. The offline store seeds `backen
 | --- | --- |
 | `GET /chat` or `GET /` | Claimant intake conversation with attachment upload, review and receipt. |
 | `POST /api/intakes` | Submit a confirmed claimant packet and its files in one transaction. Returns a receipt, including on an identical retry. |
+| `GET /sample-accident-report.pdf` | Download the fictional PDF for a judge’s walkthrough. |
+| `POST /api/intakes/import-pdf` | Parse a PDF without saving a claim. Send `name` and `content_base64`; returns `document_kind`, `suggestions` and `notice`. Each suggestion carries `field`, `value` and one-based `page`. |
+| `POST /api/intakes/save-draft` | Send `token`, `draft` and `expected_revision`. Returns `status: "draft"` and the saved `revision`. |
+| `POST /api/intakes/resume` | Send `token` to retrieve that draft or its submitted receipt. |
+| `POST /api/intakes/submit` | Submit with a private link using `token`, `expected_revision` and `payload` (the complete intake object below). |
+| `POST /api/intakes/add-documents` | Send `token`, a fresh UUIDv4 `request_id` and `documents` for the outstanding paperwork. Returns the updated receipt. Reuse the same ID and body when retrying. |
 | `GET /reviewer` | Reviewer workspace for the fictional demo queue. |
 | `POST /api/chat` | A reviewer question about an existing demo case. Returns the selected claim, answer, evidence, suggested follow-ups and the providers actually used. |
 | `GET /api/claims` | `{"claims":[...]}`. Rows have `case_id`, `case_status`, the original `recommendation`, the current `effective_recommendation`, and integer `revision`. |
@@ -23,7 +29,11 @@ For an offline rehearsal, pass `--store sqlite`. The offline store seeds `backen
 
 ## Connect claimant intake in Lovable
 
-Collect answers and attachments in memory. On **Submit claim**, send a JSON object to `POST /api/intakes`. Generate `request_id` with `crypto.randomUUID()`. Keep the exact confirmed body when retrying after an interrupted response.
+Collect answers and attachments in memory until the claimant chooses to save or submit. A PDF import returns suggestions for confirmation. Generate a 32-byte random `token` with `crypto.getRandomValues()` and encode it as 64 lowercase hexadecimal characters. The private link uses `/chat#claim=TOKEN`. Keep the token in the fragment and in POST bodies. Anyone holding the link can reopen that draft including its attachments; once submitted it opens the receipt and permits outstanding uploads.
+
+A draft contains `values` (partial form answers), `documents`, `step` (integer 0–16), and `sources` (field to `{"name": "report.pdf", "page": 1}`). Start with `expected_revision: 0`, then use the returned revision. HTTP 409 means the draft changed or the submission conflicts with a prior request. Reopen the saved version before editing again.
+
+On submission, send the following payload to `POST /api/intakes/submit` with its token and revision. Generate `request_id` with `crypto.randomUUID()`. Keep the confirmed request body for retries. The existing endpoint `POST /api/intakes` still accepts this payload directly for clients that only need an initial receipt.
 
 | Field | Accepted value |
 | --- | --- |
@@ -32,7 +42,7 @@ Collect answers and attachments in memory. On **Submit claim**, send a JSON obje
 | `documents` | An array of up to three objects. Use `[]` to submit without files. Each object has `kind`, `name` and `content_base64` (standard base64 with no data-URL prefix). |
 | `kind` | `incident_report`, `itemized_quote` or `damage_photo`. Each file must be PDF, PNG or JPEG, up to 2 MiB, with a matching filename extension. |
 
-HTTP 200 returns `reference`, `document_count` and `missing_documents`. The latter lists any outstanding incident report or itemized quote. An invalid packet returns 400, a changed retry under an existing ID returns 409, and an oversized request returns 413. Each succeeded receipt refers to one complete saved packet. Private submissions have no public read endpoint. [Staff access](db/README.md)
+Both submission formats return `reference`, `document_count` and `missing_documents`. Linked submissions also return `status: "submitted"` and `documents` containing the received filenames and kinds. The claimant can add each outstanding incident report or itemized quote, including after initially sending three photos. A submitted link only returns receipt information. An invalid packet returns 400, a changed retry returns 409, and an oversized request returns 413. [Staff access](db/README.md)
 
 ## Connect the reviewer chat
 

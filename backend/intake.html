@@ -416,6 +416,135 @@
           }
         }
       }
+      .drop-zone {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        border: 1px dashed #87a795;
+        background: #f2f7f2;
+        padding: 28px 18px;
+        border-radius: 11px;
+        text-align: center;
+      }
+      .drop-zone.over {
+        background: #deefdf;
+        border-color: var(--accent);
+      }
+      .upload-icon {
+        font-size: 28px;
+        line-height: 1;
+        color: var(--accent);
+      }
+      .sample {
+        display: inline-block;
+        font-size: 14px;
+        color: var(--accent);
+        margin-top: 16px;
+      }
+      .file-hint,
+      .citation {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .citation {
+        display: block;
+        margin: 4px 0 8px;
+        overflow-wrap: anywhere;
+      }
+      .previous {
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 14px;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+        padding: 6px 0;
+      }
+      .suggestion {
+        margin-top: 15px;
+      }
+      .suggestion .choices {
+        margin-top: 7px;
+      }
+      .suggestion .choices button {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        text-align: left;
+      }
+      .thumb {
+        width: 65px;
+        height: 65px;
+        border-radius: 6px;
+        object-fit: contain;
+        background: var(--ground);
+        flex: none;
+      }
+      .file {
+        flex-wrap: wrap;
+      }
+      .file-info {
+        flex: 1 1 115px;
+      }
+      .file-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .checklist {
+        list-style: none;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+      }
+      .checklist li {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: space-between;
+        font-size: 14px;
+        border-bottom: 1px solid var(--line);
+        padding: 6px 0;
+      }
+      .checklist strong {
+        font-weight: 550;
+      }
+      .checklist .present span {
+        color: var(--accent);
+      }
+      .checklist .missing span {
+        color: #78500c;
+      }
+      .photo-actions {
+        margin-top: 7px;
+      }
+      .save-bar,
+      .follow-up {
+        border-top: 1px solid var(--line);
+        margin-top: 22px;
+        padding-top: 10px;
+      }
+      .save-bar > button {
+        padding-left: 0;
+      }
+      .link-panel {
+        margin: 14px 0;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 14px;
+        background: var(--ground);
+      }
+      .link-panel p {
+        margin: 4px 0 9px;
+      }
+      .link-panel input {
+        font-size: 13px;
+      }
+      @media (max-width: 480px) {
+        .file-buttons {
+          flex-basis: 100%;
+        }
+      }
     </style>
   </head>
   <body>
@@ -430,7 +559,7 @@
       <aside class="side">
         <h1>Report a motor claim</h1>
         <p class="sub">
-          Tell us what happened and attach the documents you have.
+          Start with your accident report or tell us what happened.
         </p>
         <ol class="stages" id="stages" aria-label="Claim progress"></ol>
       </aside>
@@ -498,47 +627,50 @@
       };
       const injuries = { yes: 'Yes', no: 'No', unknown: 'I don’t know' };
       const names = ['Incident', 'Claim details', 'Documents', 'Review'];
-      const docsStep = fields.length,
-        reviewStep = docsStep + 1,
-        receiptStep = reviewStep + 1;
-      const historyEl = document.querySelector('#history'),
-        current = document.querySelector('#current'),
-        stages = document.querySelector('#stages');
-      let step = 0,
-        editing = false,
-        values = {},
-        files = [],
-        receipt = null,
-        sending = false,
-        uncertain = false,
-        needsNewId = false,
-        cachedBody = null,
-        requestId = null;
-      const el = (tag, className, text) => {
-        const item = document.createElement(tag);
-        if (className) item.className = className;
-        if (text !== undefined) item.textContent = text;
-        return item;
-      };
-      function button(text, className, handler) {
-        const b = el('button', 'btn ' + (className || ''), text);
-        b.type = 'button';
-        b.addEventListener('click', handler);
-        return b;
+      const docsStep = fields.length;
+      const reviewStep = docsStep + 1;
+      const welcomeStep = -1;
+      const importStep = -2;
+      const receiptStep = -3;
+      const requiredKinds = ['incident_report', 'itemized_quote'];
+      const maxFiles = 3;
+      const maxBytes = 2 * 1024 * 1024;
+      const historyEl = document.querySelector('#history');
+      const current = document.querySelector('#current');
+      const stages = document.querySelector('#stages');
+      let step = welcomeStep;
+      let editing = false;
+      let values = {};
+      let sources = {};
+      let partialAnswer = '';
+      let files = [];
+      let importResult = null;
+      let importFile = null;
+      let revision = 0;
+      let token = '';
+      let requestId = '';
+      let receipt = null;
+      let pending = null;
+      let busy = false;
+      let saveNotice = false;
+      let conflict = false;
+
+      function el(tag, cls, text) {
+        const node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined) node.textContent = text;
+        return node;
       }
-      function addError(card) {
-        const p = el('p', 'error');
-        p.setAttribute('role', 'alert');
-        p.hidden = true;
-        card.append(p);
-        return function (message) {
-          p.textContent = message;
-          p.hidden = !message;
-        };
+
+      function button(text, cls, action) {
+        const node = el('button', 'btn ' + cls, text);
+        node.type = 'button';
+        node.addEventListener('click', () => {
+          if (!busy) action();
+        });
+        return node;
       }
-      function status(text) {
-        document.querySelector('#announce').textContent = text;
-      }
+
       function today() {
         const parts = new Intl.DateTimeFormat('en-GB', {
           timeZone: 'Europe/Berlin',
@@ -546,254 +678,16 @@
           month: '2-digit',
           day: '2-digit'
         }).formatToParts(new Date());
-        const take = (type) => parts.find((p) => p.type === type).value;
-        return take('year') + '-' + take('month') + '-' + take('day');
+        const part = (key) => parts.find((p) => p.type === key).value;
+        return [part('year'), part('month'), part('day')].join('-');
       }
-      function labelValue(field) {
-        return field.type === 'choice'
-          ? injuries[values[field.key]]
-          : values[field.key];
-      }
-      function resetBody() {
-        needsNewId = false;
-        cachedBody = null;
-        requestId = null;
-      }
-      function setStep(n, isEditing = false) {
-        step = n;
-        editing = isEditing;
-        render(true);
-      }
-      function finishField(field, value) {
-        if (values[field.key] !== value) resetBody();
-        values[field.key] = value;
-        setStep(editing ? reviewStep : step + 1);
-      }
-      function drawProgress() {
-        const stage =
-          step < 3 ? 0 : step < docsStep ? 1 : step === docsStep ? 2 : 3;
-        stages.replaceChildren();
-        names.forEach((name, i) => {
-          const li = el(
-            'li',
-            'stage ' +
-              (i < stage || receipt ? 'done' : stage === i ? 'active' : '')
-          );
-          if (i === stage && !receipt) li.setAttribute('aria-current', 'step');
-          li.append(el('span', 'dot'), document.createTextNode(name));
-          stages.append(li);
-        });
-      }
-      function heading(card, title, hint) {
-        const h = el('h2', '', title);
-        h.tabIndex = -1;
-        h.id = 'question-title';
-        card.append(h);
-        if (hint) card.append(el('p', 'help', hint));
-      }
-      function drawQuestion(card) {
-        const field = fields[step];
-        heading(card, field.prompt, field.hint);
-        if (field.type === 'choice') {
-          const choices = el('div', 'choices');
-          Object.entries(injuries).forEach(([key, text]) =>
-            choices.append(
-              button(text, values[field.key] === key ? 'primary' : '', () =>
-                finishField(field, key)
-              )
-            )
-          );
-          card.append(choices);
-        } else {
-          const form = el('form');
-          const input = el(field.type === 'textarea' ? 'textarea' : 'input');
-          if (field.type !== 'textarea') input.type = field.type;
-          input.id = 'answer';
-          input.name = field.key;
-          input.required = true;
-          input.setAttribute('aria-labelledby', 'question-title');
-          if (field.type === 'email') {
-            input.pattern = '[^\\s@]+@[^\\s@]+[.][^\\s@]+';
-            input.title =
-              'Enter an email address with a domain, for example alex@example.com.';
-          }
-          if (field.max) input.maxLength = field.max;
-          if (field.min) input.minLength = field.min;
-          if (field.type === 'date') input.max = today();
-          input.autocomplete = field.type === 'email' ? 'email' : 'off';
-          input.value = values[field.key] || '';
-          if (field.type === 'textarea')
-            input.placeholder = 'Describe what happened…';
-          const go = el(
-            'button',
-            'btn primary',
-            editing ? 'Save answer' : 'Continue'
-          );
-          go.type = 'submit';
-          const actions = el('div', 'actions');
-          actions.append(go);
-          form.append(input, actions);
-          card.append(form);
-          input.addEventListener('input', () => input.setCustomValidity(''));
-          form.addEventListener('submit', (event) => {
-            event.preventDefault();
-            const val = input.value.trim();
-            if (!val || (field.min && val.length < field.min)) {
-              input.setCustomValidity(
-                field.min
-                  ? 'Please enter at least ' + field.min + ' characters.'
-                  : 'Please enter an answer.'
-              );
-              input.reportValidity();
-              return;
-            }
-            finishField(field, val);
-          });
-        }
-        if (editing)
-          card.append(
-            button('Cancel edit', 'quiet', () => setStep(reviewStep))
-          );
-        else if (step > 0)
-          card.append(button('Back', 'quiet', () => setStep(step - 1)));
-      }
-      function documentList(removable, onChange) {
-        const ul = el('ul', 'files');
-        ul.setAttribute('aria-label', 'Attachments');
-        files.forEach((doc, i) => {
-          const li = el('li', 'file'),
-            info = el('div');
-          info.append(
-            el('small', '', kinds[doc.kind]),
-            el('span', '', doc.file.name)
-          );
-          li.append(info);
-          if (removable) {
-            const b = button('Remove', 'quiet', () => {
-              files.splice(i, 1);
-              resetBody();
-              onChange();
-            });
-            b.setAttribute('aria-label', 'Remove ' + doc.file.name);
-            li.append(b);
-          }
-          ul.append(li);
-        });
-        return ul;
-      }
-      function drawDocuments(card) {
-        heading(
-          card,
-          'Which documents can you attach?',
-          'You can submit with missing documents. Add up to 3 PDF, JPG or PNG files, up to 2 MiB each.'
-        );
-        const kind = el('select');
-        kind.id = 'doc-kind';
-        for (const [key, label] of Object.entries(kinds)) {
-          const o = el('option', '', label);
-          o.value = key;
-          kind.append(o);
-        }
-        const kindLabel = el('label', 'label', 'Document type');
-        kindLabel.htmlFor = kind.id;
-        const fileLabel = el('label', 'label', 'Choose files');
-        const input = el('input');
-        input.id = 'doc-files';
-        input.type = 'file';
-        input.accept =
-          '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
-        input.multiple = true;
-        fileLabel.htmlFor = input.id;
-        const area = el('div', 'docs-area');
-        area.append(kindLabel, kind, fileLabel, input);
-        card.append(area);
-        const report = addError(card);
-        const list = el('div');
-        card.append(list);
-        const controls = el('div', 'actions');
-        const proceed = button('Review claim', 'primary', () =>
-          setStep(reviewStep)
-        );
-        controls.append(
-          proceed,
-          button('Back', 'quiet', () =>
-            setStep(editing ? reviewStep : docsStep - 1)
-          )
-        );
-        card.append(controls);
-        const refresh = () => {
-          const full = files.length >= 3;
-          input.disabled = full;
-          kind.disabled = full;
-          list.replaceChildren(
-            documentList(true, () => {
-              report('');
-              refresh();
-            })
-          );
-        };
-        input.addEventListener('change', () => {
-          const add = Array.from(input.files || []);
-          input.value = '';
-          if (!add.length) return;
-          if (add.length + files.length > 3) {
-            report(
-              'A claim can include up to 3 files. Remove an attachment or select fewer files.'
-            );
-            return;
-          }
-          for (const file of add) {
-            if (
-              file.name.length > 180 ||
-              file.name !== file.name.trim() ||
-              /[\x00-\x1f\x7f\/\\]/.test(file.name)
-            ) {
-              report(
-                'Choose a filename up to 180 characters without path separators or control characters.'
-              );
-              return;
-            }
-            if (!file.size || file.size > 2 * 1024 * 1024) {
-              report(file.name + ' must contain data and be at most 2 MiB.');
-              return;
-            }
-            if (!/\.(pdf|png|jpe?g)$/i.test(file.name)) {
-              report('Choose a PDF, JPG or PNG file.');
-              return;
-            }
-          }
-          files.push(...add.map((file) => ({ kind: kind.value, file })));
-          resetBody();
-          report('');
-          refresh();
-          status(
-            add.length === 1
-              ? 'File attached.'
-              : add.length + ' files attached.'
-          );
-        });
-        refresh();
-      }
-      function line(label, value, action) {
-        const row = el('div', 'field'),
-          wrap = el('div');
-        wrap.append(el('dt', '', label), el('dd', '', value));
-        row.append(wrap);
-        if (action) {
-          const b = button('Edit', 'quiet', action);
-          b.setAttribute('aria-label', 'Edit ' + label);
-          row.append(b);
-        }
-        return row;
-      }
-      function makeUuid() {
+
+      function uid() {
         if (crypto.randomUUID) return crypto.randomUUID();
-        const b = crypto.getRandomValues(new Uint8Array(16));
-        b[6] = (b[6] & 15) | 64;
-        b[8] = (b[8] & 63) | 128;
-        const hex = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(
-          ''
-        );
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 15) | 64;
+        bytes[8] = (bytes[8] & 63) | 128;
+        const hex = hexString(bytes);
         return [
           hex.slice(0, 8),
           hex.slice(8, 12),
@@ -802,201 +696,1022 @@
           hex.slice(20)
         ].join('-');
       }
-      function base64(file) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () =>
-            reject(
-              new Error(
-                'Could not read ' +
-                  file.name +
-                  '. Remove it and select the file again.'
-              )
-            );
-          reader.onload = () => resolve(String(reader.result).split(',')[1]);
-          reader.readAsDataURL(file);
-        });
+
+      function hexString(bytes) {
+        return Array.from(bytes, (byte) =>
+          byte.toString(16).padStart(2, '0')
+        ).join('');
       }
-      async function submitClaim(card, report) {
-        if (sending) return;
-        sending = true;
-        const setDisabled = (v) =>
-          card.querySelectorAll('button').forEach((b) => {
-            b.disabled = v;
-          });
-        setDisabled(true);
-        const send = card.querySelector('[data-send]');
-        send.textContent = 'Submitting…';
-        report('');
-        try {
-          if (!cachedBody) {
-            requestId = requestId || makeUuid();
-            const documents = await Promise.all(
-              files.map(async (d) => ({
-                kind: d.kind,
-                name: d.file.name,
-                content_base64: await base64(d.file)
-              }))
+
+      function privateToken() {
+        if (!token)
+          token = hexString(crypto.getRandomValues(new Uint8Array(32)));
+        return token;
+      }
+
+      function privateURL() {
+        const url = new URL('/chat', location.origin);
+        url.hash = 'claim=' + token;
+        return url.href;
+      }
+
+      function status(text) {
+        document.getElementById('announce').textContent = text;
+      }
+
+      function heading(card, title, help) {
+        const titleEl = el('h2', '', title);
+        titleEl.id = 'question-title';
+        titleEl.tabIndex = -1;
+        card.append(titleEl);
+        if (help) card.append(el('p', 'help', help));
+      }
+
+      function showError(text) {
+        const err = current.querySelector('[role=alert]');
+        if (!err) return;
+        err.textContent = text;
+        err.hidden = !text;
+      }
+
+      function row(label, value, action) {
+        const item = el('div', 'field');
+        const details = el('div');
+        details.append(el('dt', '', label), el('dd', '', value));
+        item.append(details);
+        if (action) {
+          const edit = button('Edit', 'quiet', action);
+          edit.setAttribute('aria-label', 'Edit ' + label);
+          item.append(edit);
+        }
+        return item;
+      }
+
+      function setStep(next, isEdit = false) {
+        step = next;
+        editing = isEdit;
+        partialAnswer = '';
+        saveNotice = false;
+        render(true);
+      }
+
+      function nextUnanswered() {
+        const index = fields.findIndex((field) => !values[field.key]);
+        return index === -1 ? docsStep : index;
+      }
+
+      function setBusy(value) {
+        busy = value;
+        current.setAttribute('aria-busy', String(value));
+        current.inert = value;
+      }
+
+      async function api(path, body) {
+        const resp = await fetch('/api/intakes/' + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          cache: 'no-store',
+          referrerPolicy: 'no-referrer'
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok) {
+          const error = new Error(
+            typeof data?.error === 'string'
+              ? data.error
+              : 'Could not complete this request.'
+          );
+          error.status = resp.status;
+          throw error;
+        }
+        if (!data || typeof data !== 'object')
+          throw new Error('Could not read the response.');
+        return data;
+      }
+
+      function fieldInput(field, id) {
+        const node = el(field.type === 'textarea' ? 'textarea' : 'input');
+        node.id = id;
+        node.name = field.key;
+        if (field.type !== 'textarea') node.type = field.type;
+        if (field.type === 'email')
+          node.pattern = '[^\\s@]+@[^\\s@.]+([.][^\\s@.]+)+';
+        if (field.type === 'date') node.max = today();
+        if (field.min) node.minLength = field.min;
+        if (field.max) node.maxLength = field.max;
+        node.autocomplete = field.type === 'email' ? 'email' : 'off';
+        node.addEventListener('input', () => node.setCustomValidity(''));
+        return node;
+      }
+
+      function validField(field, node) {
+        const value = node.value.trim();
+        if (!value || (field.min && value.length < field.min)) {
+          node.setCustomValidity(
+            field.min
+              ? 'Enter at least ' + field.min + ' characters.'
+              : 'Enter an answer.'
+          );
+        }
+        return node.reportValidity();
+      }
+
+      function sourceLabel(source) {
+        return source.name + ' · page ' + source.page;
+      }
+
+      function drawProgress() {
+        const stage = receipt
+          ? 4
+          : step < 3
+            ? 0
+            : step < docsStep
+              ? 1
+              : step === docsStep
+                ? 2
+                : 3;
+        stages.replaceChildren(
+          ...names.map((name, index) => {
+            const item = el(
+              'li',
+              'stage ' +
+                (index < stage ? 'done' : index === stage ? 'active' : '')
             );
-            cachedBody = JSON.stringify(
-              Object.assign({ request_id: requestId }, values, { documents })
-            );
-          }
-          uncertain = true;
-          const response = await fetch('/api/intakes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: cachedBody
-          });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) {
-            if (response.status === 409) {
-              uncertain = false;
-              needsNewId = true;
-              throw new Error(
-                'This submission ID belongs to a different claim. Check your details and select “Submit as new claim” to send a separate report.'
-              );
-            }
-            if ([400, 413, 415, 422].includes(response.status)) {
-              uncertain = false;
-              cachedBody = null;
-              throw new Error(
-                typeof data.error === 'string'
-                  ? data.error
-                  : 'Check your answers and attachments, then submit again.'
-              );
-            }
-            throw new Error(
-              'We couldn’t confirm receipt. Retry this submission to check its status.'
-            );
-          }
-          if (
-            typeof data.reference !== 'string' ||
-            !data.reference.trim() ||
-            !Number.isInteger(data.document_count) ||
-            !Array.isArray(data.missing_documents)
-          )
-            throw new Error(
-              'We couldn’t read the receipt. Retry this submission to retrieve it.'
-            );
-          receipt = data;
-          values = {};
-          files = [];
-          cachedBody = null;
-          requestId = null;
-          uncertain = false;
-          step = receiptStep;
-          sending = false;
-          render(true);
-          return;
-        } catch (error) {
-          sending = false;
-          render(false);
-          const failure = current.querySelector('[role=alert]');
-          failure.hidden = false;
-          failure.textContent =
-            error instanceof TypeError
-              ? 'Connection interrupted. Retry this submission when you are connected.'
-              : error.message;
-          current.querySelector('[data-send]').focus();
+            if (index === stage) item.setAttribute('aria-current', 'step');
+            item.append(el('span', 'dot'), document.createTextNode(name));
+            return item;
+          })
+        );
+      }
+
+      function drawHistory() {
+        historyEl.replaceChildren();
+        if (step < 0 || step >= reviewStep || editing) return;
+        const completed = fields.filter(
+          (field) => values[field.key] && field !== fields[step]
+        );
+        if (!completed.length) return;
+        const details = el('details', 'previous');
+        details.append(
+          el('summary', '', 'Your answers (' + completed.length + ')')
+        );
+        const list = el('dl', 'review');
+        completed.forEach((field) =>
+          list.append(row(field.label, labelValue(field)))
+        );
+        details.append(list);
+        historyEl.append(details);
+      }
+
+      function labelValue(field) {
+        return field.type === 'choice'
+          ? injuries[values[field.key]]
+          : values[field.key];
+      }
+
+      function validateFile(file, onlyPDF = false) {
+        if (!file || !file.size || file.size > maxBytes)
+          throw new Error('Choose a non-empty file up to 2 MiB.');
+        if (
+          !file.name.trim() ||
+          file.name !== file.name.trim() ||
+          file.name.length > 180 ||
+          /[\x00-\x1f\x7f-\x9f/\\]/.test(file.name)
+        ) {
+          throw new Error(
+            'Use a filename up to 180 characters without path separators.'
+          );
+        }
+        const ext = file.name.toLowerCase().split('.').pop();
+        if (
+          onlyPDF ? ext !== 'pdf' : !['png', 'jpg', 'jpeg', 'pdf'].includes(ext)
+        ) {
+          throw new Error(
+            onlyPDF
+              ? 'Choose a PDF report or quote.'
+              : 'Choose a PDF, JPEG or PNG file.'
+          );
         }
       }
+
+      async function encodeFile(file, kind) {
+        const encoded = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.onerror = () =>
+            reject(
+              new Error('The file could not be read. Please choose it again.')
+            );
+          reader.readAsDataURL(file);
+        });
+        return { kind, name: file.name, content_base64: encoded };
+      }
+
+      function fileButton(container, label, id, accept, onFiles, options = {}) {
+        const input = el('input');
+        input.type = 'file';
+        input.id = id;
+        input.hidden = true;
+        input.accept = accept;
+        input.multiple = Boolean(options.multiple);
+        if (options.camera) input.setAttribute('capture', 'environment');
+        const choose = button(label, options.style || '', () => input.click());
+        input.addEventListener('change', () => {
+          const selected = Array.from(input.files);
+          input.value = '';
+          if (selected.length && !busy) onFiles(selected);
+        });
+        container.append(input, choose);
+        return choose;
+      }
+
+      function drawWelcome(card) {
+        heading(
+          card,
+          'How would you like to start?',
+          'An accident report can fill in details for you. You’ll check each answer before it is used.'
+        );
+        const drop = el('div', 'drop-zone');
+        const icon = el('span', 'upload-icon', '↑');
+        icon.setAttribute('aria-hidden', 'true');
+        drop.append(icon);
+        fileButton(
+          drop,
+          'Import a PDF',
+          'import-file',
+          '.pdf,application/pdf',
+          (list) => importPDF(list[0]),
+          { style: 'primary' }
+        );
+        drop.append(
+          el('span', 'file-hint', 'Or drop one PDF here · up to 2 MiB')
+        );
+        drop.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          drop.classList.add('over');
+        });
+        drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+        drop.addEventListener('drop', (event) => {
+          event.preventDefault();
+          drop.classList.remove('over');
+          if (busy) return;
+          if (event.dataTransfer.files.length !== 1)
+            return showError('Drop one PDF to start your claim.');
+          importPDF(event.dataTransfer.files[0]);
+        });
+        const actions = el('div', 'actions');
+        actions.append(button('Tell me what happened', '', () => setStep(0)));
+        const sample = el('a', 'sample', 'Download sample accident report');
+        sample.href = '/sample-accident-report.pdf';
+        sample.download = 'sample-accident-report.pdf';
+        card.append(drop, actions, sample);
+      }
+
+      async function importPDF(file) {
+        try {
+          validateFile(file, true);
+          setBusy(true);
+          status('Reading your PDF.');
+          const help = current.querySelector('.file-hint');
+          if (help) help.textContent = 'Reading ' + file.name + '…';
+          importFile = await encodeFile(file, '');
+          try {
+            importResult = await api('import-pdf', {
+              name: importFile.name,
+              content_base64: importFile.content_base64
+            });
+            if (!Array.isArray(importResult.suggestions))
+              throw new Error('Unexpected import response.');
+          } catch {
+            importResult = {
+              suggestions: [],
+              document_kind: null,
+              notice:
+                'We couldn’t read the PDF. You can attach it and enter the answers yourself.'
+            };
+          }
+          setStep(importStep);
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          setBusy(false);
+          status('');
+        }
+      }
+
+      function kindSelect(includeBlank) {
+        const select = el('select');
+        if (includeBlank) select.add(new Option('Choose document type', ''));
+        Object.entries(kinds).forEach(([key, name]) =>
+          select.add(new Option(name, key))
+        );
+        return select;
+      }
+
+      function drawImport(card) {
+        heading(card, 'Check your PDF details', importFile.name);
+        if (importResult.notice)
+          card.append(el('p', 'help', importResult.notice));
+        const form = el('form');
+        const typeLabel = el('label', 'label', 'Document type');
+        typeLabel.htmlFor = 'import-kind';
+        const select = kindSelect(true);
+        select.id = 'import-kind';
+        select.required = true;
+        select.value =
+          importResult.document_kind in kinds ? importResult.document_kind : '';
+        form.append(typeLabel, select);
+        const extracted = [];
+        for (const field of fields.filter((f) => f.type !== 'choice')) {
+          const options = importResult.suggestions.filter(
+            (s) =>
+              s.field === field.key &&
+              typeof s.value === 'string' &&
+              Number.isInteger(s.page)
+          );
+          if (!options.length) continue;
+          const wrap = el('div', 'suggestion');
+          const label = el('label', 'label', field.label);
+          const input = fieldInput(field, 'import-' + field.key);
+          label.htmlFor = input.id;
+          const conflict = new Set(options.map((s) => s.value)).size > 1;
+          let source = conflict
+            ? null
+            : { name: importFile.name, page: options[0].page };
+          const cite = el(
+            'small',
+            'citation',
+            source
+              ? sourceLabel(source)
+              : 'Several values found. Choose one or enter your own.'
+          );
+          input.value = conflict ? '' : options[0].value;
+          const matchingSource = () => {
+            const match =
+              options.find(
+                (option) =>
+                  option.value === input.value.trim() &&
+                  (!source || option.page === source.page)
+              ) ||
+              options.find((option) => option.value === input.value.trim());
+            return match ? { name: importFile.name, page: match.page } : null;
+          };
+          input.addEventListener('input', () => {
+            const matched = matchingSource();
+            cite.textContent = matched
+              ? sourceLabel(matched)
+              : input.value.trim()
+                ? 'Your correction · originally suggested from ' +
+                  importFile.name
+                : 'You can answer this question later.';
+          });
+          wrap.append(label, cite, input);
+          if (conflict) {
+            const choices = el('div', 'choices');
+            for (const option of options) {
+              choices.append(
+                button(option.value + ' · page ' + option.page, '', () => {
+                  input.value = option.value;
+                  input.setCustomValidity('');
+                  source = { name: importFile.name, page: option.page };
+                  cite.textContent = sourceLabel(source);
+                })
+              );
+            }
+            wrap.append(choices);
+          }
+          extracted.push({ field, input, source: matchingSource });
+          form.append(wrap);
+        }
+        const actions = el('div', 'actions');
+        const use = el(
+          'button',
+          'btn primary',
+          extracted.length
+            ? 'Confirm details and continue'
+            : 'Attach PDF and continue'
+        );
+        use.type = 'submit';
+        actions.append(
+          use,
+          button('Choose another start', 'quiet', () => {
+            importResult = importFile = null;
+            setStep(welcomeStep);
+          })
+        );
+        form.append(actions);
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          const chosen = extracted.filter((item) => item.input.value.trim());
+          if (!chosen.every((item) => validField(item.field, item.input)))
+            return;
+          for (const item of chosen) {
+            values[item.field.key] = item.input.value.trim();
+            if (item.source()) sources[item.field.key] = item.source();
+          }
+          files.push({ ...importFile, kind: select.value });
+          importResult = importFile = null;
+          setStep(nextUnanswered());
+        });
+        card.append(form);
+      }
+
+      function drawQuestion(card) {
+        const field = fields[step];
+        heading(card, field.prompt, field.hint);
+        if (sources[field.key])
+          card.append(
+            el(
+              'p',
+              'citation',
+              'Imported from ' + sourceLabel(sources[field.key])
+            )
+          );
+        function finish(value) {
+          if (value !== (values[field.key] || partialAnswer))
+            delete sources[field.key];
+          values[field.key] = value;
+          setStep(editing ? reviewStep : nextUnanswered());
+        }
+        if (field.type === 'choice') {
+          const choices = el('div', 'choices');
+          Object.entries(injuries).forEach(([key, name]) =>
+            choices.append(
+              button(name, values[field.key] === key ? 'primary' : '', () =>
+                finish(key)
+              )
+            )
+          );
+          card.append(choices);
+        } else {
+          const form = el('form');
+          const input = fieldInput(field, 'answer');
+          input.value = partialAnswer || values[field.key] || '';
+          input.required = true;
+          input.setAttribute('aria-labelledby', 'question-title');
+          const actions = el('div', 'actions');
+          const proceed = el(
+            'button',
+            'btn primary',
+            editing ? 'Save answer' : 'Continue'
+          );
+          proceed.type = 'submit';
+          actions.append(proceed);
+          form.append(input, actions);
+          form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            if (validField(field, input)) finish(input.value.trim());
+          });
+          card.append(form);
+        }
+        if (editing)
+          card.append(
+            button('Cancel edit', 'quiet', () => setStep(reviewStep))
+          );
+        else if (step > 0) {
+          card.append(button('Back', 'quiet', () => setStep(step - 1)));
+        }
+      }
+
+      function checklist(card, docs) {
+        const group = el('ul', 'checklist');
+        group.setAttribute('aria-label', 'Document checklist');
+        for (const kind of requiredKinds) {
+          const received = docs.some((doc) => doc.kind === kind);
+          const line = el('li', received ? 'present' : 'missing');
+          line.append(
+            el('strong', '', kinds[kind]),
+            el('span', '', received ? 'Included' : 'Still needed')
+          );
+          group.append(line);
+        }
+        card.append(group);
+      }
+
+      function fileList(card, docs, allowChanges) {
+        if (!docs.length) return;
+        const list = el('ul', 'files');
+        list.setAttribute(
+          'aria-label',
+          allowChanges ? 'Attachments to send' : 'Received attachments'
+        );
+        docs.forEach((doc, index) => {
+          const li = el('li', 'file');
+          if (doc.content_base64 && /\.(png|jpe?g)$/i.test(doc.name)) {
+            const image = el('img', 'thumb');
+            image.alt = 'Preview of ' + doc.name;
+            image.src =
+              'data:image/' +
+              (/\.png$/i.test(doc.name) ? 'png' : 'jpeg') +
+              ';base64,' +
+              doc.content_base64;
+            li.append(image);
+          }
+          const info = el('div', 'file-info');
+          info.append(
+            el('small', '', kinds[doc.kind]),
+            el('span', '', doc.name)
+          );
+          li.append(info);
+          if (allowChanges) {
+            const actions = el('div', 'file-buttons');
+            if (doc.kind === 'damage_photo') {
+              fileButton(
+                actions,
+                'Retake',
+                'retake-' + index,
+                'image/*',
+                (add) => addFiles(add, 'damage_photo', index),
+                { camera: true, style: 'quiet' }
+              );
+            }
+            const remove = button('Remove', 'quiet', () => {
+              files.splice(index, 1);
+              render(false);
+            });
+            remove.setAttribute('aria-label', 'Remove ' + doc.name);
+            actions.append(remove);
+            li.append(actions);
+          }
+          list.append(li);
+        });
+        card.append(list);
+      }
+
+      async function addFiles(list, kind, replaceIndex) {
+        try {
+          if (receipt) {
+            if (
+              !receipt.missing_documents.includes(kind) ||
+              files.some((doc) => doc.kind === kind) ||
+              list.length !== 1
+            ) {
+              throw new Error('Choose one file for each outstanding document.');
+            }
+          } else if (
+            files.length + list.length - (replaceIndex === undefined ? 0 : 1) >
+            maxFiles
+          ) {
+            throw new Error(
+              'Choose up to 3 files for the initial claim. Remove a file before choosing another.'
+            );
+          }
+          list.forEach((file) => validateFile(file));
+          setBusy(true);
+          const docs = await Promise.all(
+            list.map((file) => encodeFile(file, kind))
+          );
+          if (replaceIndex === undefined) files.push(...docs);
+          else files.splice(replaceIndex, 1, ...docs);
+          render(false);
+          status('Attachment added.');
+        } catch (err) {
+          showError(err.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function uploadControls(card, allDocs) {
+        if (!receipt && allDocs.length >= maxFiles) {
+          card.append(
+            el('p', 'file-hint', 'All 3 initial attachment slots are used.')
+          );
+          return;
+        }
+        const outstanding = receipt
+          ? receipt.missing_documents.filter(
+              (kind) => !files.some((doc) => doc.kind === kind)
+            )
+          : [];
+        if (receipt && !outstanding.length) return;
+        const group = el('div', 'upload-controls');
+        const label = el('label', 'label', 'Paperwork type');
+        label.htmlFor = 'document-kind';
+        const kind = receipt ? el('select') : kindSelect(false);
+        if (receipt)
+          outstanding.forEach((key) => kind.add(new Option(kinds[key], key)));
+        kind.id = 'document-kind';
+        kind.value = receipt
+          ? outstanding[0]
+          : requiredKinds.find((k) => !allDocs.some((doc) => doc.kind === k)) ||
+            requiredKinds[0];
+        group.append(label, kind);
+        const buttons = el('div', 'actions');
+        fileButton(
+          buttons,
+          'Attach paperwork',
+          'doc-files',
+          '.pdf,.jpg,.jpeg,.png',
+          (list) => addFiles(list, kind.value),
+          { multiple: !receipt }
+        );
+        group.append(buttons);
+        if (receipt) {
+          group.append(
+            el('p', 'file-hint', 'PDF, JPEG or PNG · up to 2 MiB per file')
+          );
+          card.append(group);
+          return;
+        }
+        const photoLabel = el('p', 'label', 'Damage photos');
+        const photos = el('div', 'choices photo-actions');
+        fileButton(
+          photos,
+          'Take a photo',
+          'camera-file',
+          'image/*',
+          (list) => addFiles(list, 'damage_photo'),
+          { camera: true }
+        );
+        fileButton(
+          photos,
+          'Choose from gallery',
+          'gallery-files',
+          'image/jpeg,image/png',
+          (list) => addFiles(list, 'damage_photo'),
+          { multiple: true }
+        );
+        group.append(
+          photoLabel,
+          photos,
+          el('p', 'file-hint', 'PDF, JPEG or PNG · up to 2 MiB per file')
+        );
+        card.append(group);
+      }
+
+      function drawDocuments(card) {
+        heading(
+          card,
+          'Which documents can you attach?',
+          'You can submit now and use your private link to add missing paperwork later.'
+        );
+        checklist(card, files);
+        fileList(card, files, true);
+        uploadControls(card, files);
+        const actions = el('div', 'actions');
+        actions.append(
+          button('Review claim', 'primary', () => setStep(reviewStep)),
+          button('Back', 'quiet', () =>
+            setStep(editing ? reviewStep : fields.length - 1)
+          )
+        );
+        card.append(actions);
+      }
+
       function drawReview(card) {
         heading(
           card,
           'Ready to submit your claim?',
           'Check your answers and attachments. Submitting sends them to the claims team.'
         );
-        const dl = el('dl', 'review');
-        fields.forEach((field, i) =>
-          dl.append(
-            line(
-              field.label,
-              labelValue(field),
-              uncertain ? null : () => setStep(i, true)
-            )
-          )
-        );
-        dl.append(
-          line(
+        const list = el('dl', 'review');
+        fields.forEach((field, i) => {
+          const item = row(field.label, labelValue(field), () =>
+            setStep(i, true)
+          );
+          item
+            .querySelector('div')
+            .append(
+              el(
+                'small',
+                'citation',
+                sources[field.key]
+                  ? 'Imported from ' + sourceLabel(sources[field.key])
+                  : 'Provided by you'
+              )
+            );
+          list.append(item);
+        });
+        list.append(
+          row(
             'Documents',
-            files.length
-              ? files.map((d) => kinds[d.kind] + ' · ' + d.file.name).join('\n')
-              : 'No documents attached',
-            uncertain ? null : () => setStep(docsStep, true)
+            files.map((doc) => doc.name).join('\n') || 'No documents attached',
+            () => setStep(docsStep, true)
           )
         );
-        card.append(dl);
-        const report = addError(card);
-        const buttons = el('div', 'actions');
-        const submit = button(
-          needsNewId
-            ? 'Submit as new claim'
-            : uncertain
-              ? 'Retry submission'
-              : 'Submit claim',
-          'primary',
-          () => {
-            if (needsNewId) resetBody();
-            submitClaim(card, report);
-          }
-        );
-        submit.dataset.send = 'true';
-        buttons.append(submit);
-        card.append(buttons);
+        card.append(list);
+        checklist(card, files);
+        const actions = el('div', 'actions');
+        actions.append(button('Submit claim', 'primary', submitClaim));
+        card.append(actions);
       }
+
+      function captureInput() {
+        const input = current.querySelector('#answer');
+        if (input) partialAnswer = input.value;
+      }
+
+      function saveDraft() {
+        const previousAnswer = fields[step]
+          ? values[fields[step].key] || partialAnswer
+          : '';
+        captureInput();
+        const draftValues = { ...values };
+        const draftSources = { ...sources };
+        if (step >= 0 && step < docsStep && fields[step].type !== 'choice') {
+          draftValues[fields[step].key] = partialAnswer;
+          if (partialAnswer !== previousAnswer)
+            delete draftSources[fields[step].key];
+        }
+        sendOperation('save-draft', {
+          token: privateToken(),
+          expected_revision: revision,
+          draft: {
+            values: draftValues,
+            documents: files,
+            sources: draftSources,
+            step
+          }
+        });
+      }
+
+      function submitClaim() {
+        if (!requestId) requestId = uid();
+        sendOperation('submit', {
+          token: privateToken(),
+          expected_revision: revision,
+          payload: { ...values, request_id: requestId, documents: files }
+        });
+      }
+
+      async function sendOperation(path, body) {
+        if (busy) return;
+        pending = { path, body };
+        setBusy(true);
+        status('Sending…');
+        try {
+          const data = await api(path, body);
+          if (path === 'save-draft') {
+            if (data.status !== 'draft' || !Number.isInteger(data.revision))
+              throw new Error('Incomplete draft receipt.');
+            revision = data.revision;
+            saveNotice = true;
+            history.replaceState(null, '', privateURL());
+          } else {
+            acceptReceipt(data);
+            history.replaceState(null, '', privateURL());
+          }
+          pending = null;
+          conflict = false;
+          render(path !== 'save-draft');
+          status(path === 'save-draft' ? 'Draft saved.' : 'Receipt updated.');
+        } catch (err) {
+          if ([400, 404, 409, 413, 415, 422].includes(err.status)) {
+            pending = null;
+            conflict = err.status === 409;
+          }
+          render(false);
+          showError(
+            pending
+              ? 'Your connection was interrupted. Retry to confirm what was saved.'
+              : err.message
+          );
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function acceptReceipt(data) {
+        if (
+          data.status !== 'submitted' ||
+          typeof data.reference !== 'string' ||
+          !Array.isArray(data.documents) ||
+          !Array.isArray(data.missing_documents) ||
+          data.documents.length !== data.document_count
+        )
+          throw new Error('Could not confirm the receipt.');
+        values = {};
+        files = [];
+        sources = {};
+        importResult = importFile = null;
+        partialAnswer = '';
+        receipt = data;
+        step = receiptStep;
+        saveNotice = false;
+        editing = false;
+      }
+
       function drawReceipt(card) {
         heading(
           card,
           'Claim received',
-          'Keep this reference for your records.'
+          'Keep your reference and private follow-up link.'
         );
         card.append(el('p', 'reference', receipt.reference));
-        const dl = el('dl', 'review');
-        dl.append(line('Documents received', String(receipt.document_count)));
-        const missing = receipt.missing_documents.map((k) => kinds[k] || k);
-        if (missing.length)
-          dl.append(line('Documents still missing', missing.join(', ')));
-        card.append(dl);
-        const actions = el('div', 'actions');
-        actions.append(
-          button('Report another claim', 'primary', () => {
-            values = {};
-            files = [];
-            receipt = null;
-            resetBody();
-            uncertain = false;
-            setStep(0);
-          })
+        const copy = button('Copy reference', 'quiet', () =>
+          copyText(receipt.reference, copy)
         );
-        card.append(actions);
+        card.append(copy);
+        card.append(
+          el('h3', '', 'Files received (' + receipt.document_count + ')')
+        );
+        fileList(card, receipt.documents, false);
+        const missing = receipt.missing_documents.map((k) => kinds[k] || k);
+        card.append(
+          el(
+            'p',
+            'file-hint',
+            missing.length
+              ? 'Still needed: ' + missing.join(', ') + '.'
+              : 'All requested paperwork has been received.'
+          )
+        );
+        linkPanel(card, 'Private follow-up link');
+        if (receipt.missing_documents.length) {
+          const details = el('details', 'follow-up');
+          details.open = files.length > 0;
+          details.append(el('summary', '', 'Add documents to this claim'));
+          fileList(details, files, true);
+          uploadControls(details, [...receipt.documents, ...files]);
+          if (files.length) {
+            const send = button('Send additional documents', 'primary', () =>
+              sendOperation('add-documents', {
+                token,
+                request_id: uid(),
+                documents: files
+              })
+            );
+            details.append(send);
+          }
+          card.append(details);
+        }
+        card.append(button('Report another claim', 'quiet', fresh));
       }
+
+      async function copyText(text, action) {
+        try {
+          await navigator.clipboard.writeText(text);
+          status('Copied.');
+          action.textContent = 'Copied';
+        } catch {
+          const copyBox = el('input');
+          copyBox.readOnly = true;
+          copyBox.value = text;
+          copyBox.setAttribute('aria-label', 'Select and copy');
+          action.after(copyBox);
+          copyBox.select();
+          status('Select and copy the text.');
+        }
+      }
+
+      function linkPanel(card, title) {
+        const panel = el('div', 'link-panel');
+        panel.append(
+          el('strong', '', title),
+          el(
+            'p',
+            'file-hint',
+            'Anyone with this link can open it. Keep it private.'
+          )
+        );
+        const input = el('input');
+        input.type = 'text';
+        input.readOnly = true;
+        input.value = privateURL();
+        input.setAttribute('aria-label', title);
+        input.addEventListener('focus', () => input.select());
+        const copy = button('Copy private link', 'quiet', () =>
+          copyText(privateURL(), copy)
+        );
+        panel.append(input, copy);
+        card.append(panel);
+      }
+
+      function fresh() {
+        history.replaceState(null, '', location.pathname);
+        token = '';
+        requestId = '';
+        revision = 0;
+        values = {};
+        sources = {};
+        files = [];
+        receipt = pending = importFile = importResult = null;
+        conflict = false;
+        setStep(welcomeStep);
+      }
+
+      async function resume() {
+        setBusy(true);
+        status('Opening private link…');
+        try {
+          const data = await api('resume', { token });
+          if (data.status === 'submitted') acceptReceipt(data);
+          else if (
+            data.status === 'draft' &&
+            data.draft &&
+            Number.isInteger(data.revision)
+          ) {
+            revision = data.revision;
+            const draft = data.draft;
+            values = { ...draft.values };
+            sources = { ...draft.sources };
+            files = draft.documents;
+            step = draft.step;
+            partialAnswer = '';
+            if (
+              step >= 0 &&
+              step < docsStep &&
+              fields[step].type !== 'choice'
+            ) {
+              partialAnswer = values[fields[step].key] || '';
+              delete values[fields[step].key];
+            }
+            if (
+              step < 0 ||
+              step > reviewStep ||
+              (step >= docsStep && nextUnanswered() < docsStep)
+            )
+              step = nextUnanswered();
+            receipt = null;
+          } else throw new Error('Invalid draft receipt.');
+          conflict = false;
+          pending = null;
+          editing = saveNotice = false;
+          render(true);
+          status(
+            data.status === 'submitted'
+              ? 'Claim receipt opened.'
+              : 'Draft opened.'
+          );
+        } catch (error) {
+          current.replaceChildren();
+          const card = el('div', 'card');
+          heading(
+            card,
+            'Couldn’t open this private link',
+            error.status === 404
+              ? 'Check that you copied the complete link.'
+              : 'Check your connection and try again.'
+          );
+          card.append(
+            button('Try again', 'primary', resume),
+            button('Start a new claim', 'quiet', fresh)
+          );
+          current.append(card);
+        } finally {
+          setBusy(false);
+        }
+      }
+
       function render(focus) {
         drawProgress();
-        historyEl.replaceChildren();
-        if (step < reviewStep && !editing) {
-          fields.slice(0, Math.min(step, docsStep)).forEach((field) => {
-            const prior = el('div', 'past');
-            prior.append(
-              el('small', '', field.prompt),
-              el('p', '', labelValue(field))
-            );
-            historyEl.append(prior);
-          });
-        }
+        drawHistory();
+        current.replaceChildren();
         const card = el('div', 'card');
-        current.replaceChildren(card);
-        if (receipt) drawReceipt(card);
+        current.append(card);
+        if (pending || conflict) {
+          heading(
+            card,
+            pending
+              ? 'Confirm your last request'
+              : 'Your saved claim has changed',
+            pending
+              ? 'Retry the same request to check whether it reached the claims team.'
+              : 'Open the latest saved version before continuing.'
+          );
+          if (pending)
+            card.append(
+              button('Retry request', 'primary', () =>
+                sendOperation(pending.path, pending.body)
+              )
+            );
+          if (conflict)
+            card.append(button('Open latest saved version', 'primary', resume));
+        } else if (receipt) drawReceipt(card);
+        else if (step === welcomeStep) drawWelcome(card);
+        else if (step === importStep) drawImport(card);
         else if (step === docsStep) drawDocuments(card);
         else if (step === reviewStep) drawReview(card);
         else drawQuestion(card);
+        const error = el('p', 'error');
+        error.setAttribute('role', 'alert');
+        error.hidden = true;
+        card.append(error);
+        if (!pending && !conflict && step >= 0 && !receipt) {
+          const save = el('div', 'save-bar');
+          save.append(button('Save and continue later', 'quiet', saveDraft));
+          if (saveNotice) linkPanel(save, 'Draft saved · private resume link');
+          card.append(save);
+        }
         if (focus) {
-          const h = card.querySelector('h2');
-          h.focus({ preventScroll: true });
+          card.querySelector('h2')?.focus({ preventScroll: true });
           card.scrollIntoView({ block: 'nearest' });
         }
       }
+
+      window.addEventListener('hashchange', () => location.reload());
       render(false);
+      if (location.hash) {
+        const match = /^#claim=([0-9a-f]{64})$/.exec(location.hash);
+        if (match) {
+          token = match[1];
+          resume();
+        } else
+          showError(
+            'This link is incomplete. Open the full private link or start a new claim.'
+          );
+      }
     </script>
   </body>
 </html>

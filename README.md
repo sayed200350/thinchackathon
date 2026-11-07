@@ -8,9 +8,12 @@ Policy Replay receives motor-insurance claims in a guided conversation. A claima
 
 Run `python3 -m backend` from the repository root with Python 3.9+ and open the [claim intake chat](http://127.0.0.1:8765/chat).
 
-1. Describe what happened. The chat asks for the date, location, policy number, contact email and whether anyone was injured.
-2. Attach an incident report, itemized quote or damage photo. It accepts up to three PDF, JPEG or PNG files of 2 MiB each. A claimant can submit with missing paperwork.
-3. Review the answers and select **Submit claim**. The receipt shows the claim reference, attachment count and any outstanding documents. Staff can use that reference to locate the private packet. The intake uses no model credentials.
+1. Start with a PDF or describe what happened. For the judges’ demo, download the [fictional accident report](http://127.0.0.1:8765/sample-accident-report.pdf) and import it on the opening screen.
+2. Check the suggested answers against their filename and page. Correct one field, confirm the others, then answer the remaining questions. The claimant supplies the injury information.
+3. Take a damage photo or choose an image on the phone. The document checklist shows which paperwork is still missing. A claimant can save a draft and reopen the private link on another device that can reach the same server.
+4. Submit the claim. The receipt lists every received filename and the claim reference. Use the private link later to add an outstanding report or itemized quote.
+
+The backend reads labelled fields from the first 12 text pages using Poppler’s `pdftotext`. For image-only PDFs it can try OCR on the first two pages using `pdftoppm` and Tesseract with English language data. On macOS, `brew install poppler tesseract` installs the readers. Claimants can attach a protected or unreadable file and enter the answers manually. Intake uses no model credentials. The local server listens on loopback. Cross-device links from a published app must point to its reachable HTTPS origin.
 
 ## Review the fictional demo cases
 
