@@ -110,6 +110,9 @@ class TestSupabaseStore(unittest.TestCase):
         with self.assertRaises(RequestError) as raised:
             self.store.save_correction('DEV-001', dict(CORRECTION, expected_revision=True))
         self.assertEqual(raised.exception.status, 400)
+        with self.assertRaises(RequestError) as raised:
+            self.store.save_correction('DEV-001', dict(CORRECTION, policy_version='v2'))
+        self.assertEqual(raised.exception.status, 409)
         self.assertEqual(self.connection.request.call_count, 5)
         self.assertEqual(self.connection.close.call_count, 5)
 

@@ -12,6 +12,7 @@ from .store import RequestError, validate_correction
 
 
 PAGE_SIZE = 100
+REVIEW_VERSION = 'v1'
 DECISION_COLUMNS = 'case_id,case_status,policy_version,recommendation,matched_rule,supporting_facts,explanation'
 LATEST_OVERRIDE = 'overrides(revision,corrected_recommendation)'
 AUDIT_COLUMNS = 'revision,request_id,reviewer,reason,policy_version,corrected_recommendation,created_at'
@@ -89,7 +90,7 @@ class SupabaseStore:
             query[order_key] = 'gt.' + str(page[-1][order_key])
 
     def _decisions(self, columns, **filters):
-        params = {'select': columns + ',' + LATEST_OVERRIDE, 'policy_version': 'eq.v1',
+        params = {'select': columns + ',' + LATEST_OVERRIDE, 'policy_version': 'eq.' + REVIEW_VERSION,
                   'overrides.order': 'revision.desc', 'overrides.limit': 1, **filters}
         return self._rows('decisions', params, 'case_id')
 
@@ -116,7 +117,7 @@ class SupabaseStore:
         history = []
         if latest:
             # Capture a single audit snapshot even if more corrections arrive while pages are read.
-            filters = {'select': AUDIT_COLUMNS, 'case_id': 'eq.' + case_id, 'policy_version': 'eq.v1',
+            filters = {'select': AUDIT_COLUMNS, 'case_id': 'eq.' + case_id, 'policy_version': 'eq.' + REVIEW_VERSION,
                        'and': f'(revision.lte.{revision})'}
             for entry in self._rows('overrides', filters, 'revision'):
                 entry['previous_recommendation'] = previous
@@ -136,6 +137,8 @@ class SupabaseStore:
 
     def save_correction(self, case_id, body):
         values, expected = validate_correction(body)
+        if values['policy_version'] != REVIEW_VERSION:
+            raise RequestError(409, 'Policy version mismatch. Reload this claim.')
         params = {'p_case_id': case_id, 'p_expected_revision': expected,
                   **{'p_' + field: value for field, value in values.items()}}
         result, _ = self._request('rpc/reviewer_save_correction', body=params)
