@@ -91,7 +91,7 @@ class IntakeHelpTests(unittest.TestCase):
         self.page.goto(self.url)
         sample = Path(__file__).resolve().parents[1] / 'fixtures/sample-accident-report.pdf'
         with self.page.expect_file_chooser() as chooser:
-            self.button('Import a PDF').click()
+            self.button('Choose a photo or PDF').click()
         chooser.value.set_files(sample)
         location = self.page.get_by_role('textbox', name='Incident location')
         location.fill('West entrance at the demo car park')

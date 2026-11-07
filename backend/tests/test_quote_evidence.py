@@ -73,6 +73,18 @@ class QuoteEvidenceTests(unittest.TestCase):
             self.assertIsNone(result['assessment']['amount_eur'])
             self.assertEqual(result['decision']['recommendation'], 'request_information')
 
+    def test_quote_photo_is_flagged_for_manual_review_without_invented_facts(self):
+        original = (FIXTURES.parent / 'photo-guide' / 'wide.jpg').read_bytes()
+        evidence = assess_quote(attachment(original, 'Estimate-890-EUR.JPEG'))
+        self.assertIn('manual review', evidence['reason'].lower())
+        self.assertTrue(evidence['review_required'])
+        self.assertEqual(evidence['status'], 'needs_clarification')
+        self.assertIsNone(evidence['amount_eur'])
+        self.assertIsNone(evidence['itemized'])
+        self.assertIsNone(evidence['page'])
+        self.assertEqual(evidence['lines'], [])
+        self.assertEqual(evidence['garage_request'], '')
+
     def test_replay_uses_real_claim_facts_and_keeps_unknowns(self):
         evidence = assess_quote(attachment((FIXTURES / 'itemized-890.pdf').read_bytes()))
         facts = {'case_id': 'CLM-TEST', 'case_status': 'open'}

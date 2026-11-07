@@ -33,6 +33,22 @@ def claim(**changes):
 
 
 class ValidationTests(unittest.TestCase):
+    def test_enhanced_image_limits_cover_every_document_kind_and_keep_pdf_and_legacy_limits(self):
+        max_photo = 12 * 1024 * 1024
+        png = PNG.ljust(max_photo, b'p')
+        jpeg = JPEG.ljust(MAX_FILE_BYTES + 1, b'j')
+        for kind in ('damage_photo', 'itemized_quote', 'incident_report'):
+            for name, content in (('scan.PNG', png), ('scan.JPEG', jpeg)):
+                with self.subTest(kind=kind, name=name):
+                    doc = attachment(name, kind, content)
+                    packet = claim(documents=[doc])
+                    self.assertTrue(validate_intake(packet, enhanced=True)['documents'] == [doc])
+                    with self.assertRaises(RequestError):
+                        validate_intake(packet)
+        for name, content in (('over.png', png + b'!'), ('over.pdf', PDF.ljust(MAX_FILE_BYTES + 1, b'p'))):
+            with self.subTest(name=name), self.assertRaises(RequestError):
+                validate_intake(claim(documents=[attachment(name, 'itemized_quote', content)]), enhanced=True)
+
     def test_normalized_fields_and_supported_documents(self):
         original = claim(documents=[attachment(), attachment('quote.PNG', 'itemized_quote', PNG),
                                     attachment('damage.jpg', 'damage_photo', JPEG)])

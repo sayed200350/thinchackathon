@@ -22,7 +22,7 @@ alter table claim_intake_private.documents drop constraint if exists documents_p
 alter table claim_intake_private.documents add constraint documents_position_check check(position between 1 and 40);
 alter table claim_intake_private.documents drop constraint if exists documents_content_check;
 alter table claim_intake_private.documents add constraint documents_content_check check(octet_length(content) between 1 and
-    (case when kind='damage_photo' and media_type in ('image/jpeg','image/png') then 12582912 else 2097152 end));
+    (case when media_type in ('image/jpeg','image/png') then 12582912 else 2097152 end));
 
 create or replace function claim_intake_private.evidence_record(ref text) returns jsonb
 language sql stable set search_path='' as $$

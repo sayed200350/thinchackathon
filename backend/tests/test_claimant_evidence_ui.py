@@ -19,6 +19,14 @@ except ImportError:
 FIXTURES = Path(__file__).resolve().parents[1] / 'fixtures'
 
 
+def original_png(width=1100, height=1100):
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) +
+           chunk(b'IDAT', zlib.compress((b'\x00' + b'\xab' * (width * 3)) * height, 0)) + chunk(b'IEND', b''))
+    return png
+
+
 @unittest.skipUnless(sync_playwright, 'Browser tests require Playwright and Chromium.')
 class ClaimantEvidenceUITests(unittest.TestCase):
     @classmethod
@@ -106,11 +114,7 @@ class ClaimantEvidenceUITests(unittest.TestCase):
         expect(self.page.get_by_text('No documents attached', exact=True)).to_be_visible()
 
     def test_large_original_photo_date_explanation_survives_save_review_and_submission(self):
-        width = height = 1100
-        def chunk(kind, data):
-            return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
-        png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) +
-               chunk(b'IDAT', zlib.compress((b'\x00' + b'\xab' * (width * 3)) * height, 0)) + chunk(b'IEND', b''))
+        png = original_png()
         self.assertGreater(len(png), 2 * 1024 * 1024)
         self.documents()
         self.page.locator('#gallery-files').set_input_files({'name': 'door.png', 'mimeType': 'image/png', 'buffer': png})
@@ -190,3 +194,132 @@ class ClaimantEvidenceUITests(unittest.TestCase):
         expect(self.page.get_by_role('heading', name='Check your PDF details')).to_be_visible()
         expect(self.button('Copy request for garage')).to_be_visible()
         expect(self.page.get_by_role('region', name='Quote check for total-only-890.pdf')).to_contain_text('890')
+
+    def test_open_with_a_report_image_preserves_original_through_draft_and_submission(self):
+        png = original_png(960, 1000)
+        self.assertGreater(len(png), 2 * 1024 * 1024)
+        pdf_reads = []
+        self.page.on('request', lambda r: pdf_reads.append(r.url) if r.url.endswith('/import-pdf') else None)
+        with self.page.expect_file_chooser() as chooser:
+            self.button('Choose a photo or PDF').click()
+        chooser.value.set_files({'name':'report.png','mimeType':'image/png','buffer':png})
+        preview = self.page.get_by_role('img', name='Preview of report.png')
+        expect(preview).to_be_visible()
+        self.assertTrue(preview.evaluate('(img) => img.complete && img.naturalWidth > 0'))
+        self.page.get_by_label('What does this image show?').select_option('incident_report')
+        self.button('Attach image and continue').click()
+        expect(self.page.locator('#answer')).to_have_value('')
+        self.button('Save and continue later').click()
+        expect(self.page.get_by_role('textbox', name='Draft saved · private resume link')).to_be_visible()
+        self.page.reload()
+        for answer in ['A van scraped my car.', '2025-10-18', 'Demo car park', 'MOTOR-123', 'demo@example.invalid']:
+            self.page.locator('#answer').fill(answer)
+            self.button('Continue').click()
+        self.button('No').click()
+        expect(self.page.get_by_role('list', name='Attachments to send')).to_contain_text('report.png')
+        self.button('Review claim').click()
+        with self.page.expect_response('**/api/intakes/submit') as result:
+            self.button('Submit claim').click()
+        self.assertTrue(result.value.ok)
+        doc, = result.value.request.post_data_json['payload']['documents']
+        self.assertEqual((doc['kind'], base64.b64decode(doc['content_base64'])), ('incident_report', png))
+        self.assertEqual(pdf_reads, [])
+        expect(self.page.get_by_role('heading', name='Claim received', exact=True)).to_be_visible()
+
+    def test_camera_preview_can_be_replaced_reclassified_or_cancelled(self):
+        camera = self.page.locator('input[capture=environment]')
+        self.assertEqual(camera.count(), 1)
+        camera.set_input_files(FIXTURES / 'photo-guide/wide.jpg')
+        expect(self.page.get_by_role('img', name='Preview of wide.jpg')).to_be_visible()
+        with self.page.expect_file_chooser() as chooser:
+            self.button('Replace file').click()
+        chooser.value.set_files(FIXTURES / 'photo-guide/close-up.jpg')
+        expect(self.page.get_by_role('img', name='Preview of close-up.jpg')).to_be_visible()
+        expect(self.page.get_by_role('img', name='Preview of wide.jpg')).to_have_count(0)
+        self.page.get_by_label('What does this image show?').select_option('itemized_quote')
+        self.button('Cancel').click()
+        expect(self.page.get_by_role('heading', name='How would you like to start?')).to_be_visible()
+        self.documents()
+        self.button('Review claim').click()
+        expect(self.page.get_by_text('No documents attached', exact=True)).to_be_visible()
+
+    def test_dropped_camera_image_can_be_filed_as_damage_or_quote(self):
+        jpeg = base64.b64encode((FIXTURES / 'photo-guide/wide.jpg').read_bytes()).decode()
+        for kind in ('damage_photo', 'itemized_quote'):
+            with self.subTest(kind=kind):
+                self.page.goto(self.origin + '/chat')
+                self.page.locator('.drop-zone').evaluate("""(area, encoded) => {
+                    const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+                    const transfer = new DataTransfer();
+                    transfer.items.add(new File([bytes], 'evidence.jpeg', {type:'image/jpeg'}));
+                    area.dispatchEvent(new DragEvent('drop', {bubbles:true, cancelable:true, dataTransfer:transfer}));
+                }""", jpeg)
+                expect(self.page.get_by_role('img', name='Preview of evidence.jpeg')).to_be_visible()
+                self.page.get_by_label('What does this image show?').select_option(kind)
+                if kind == 'itemized_quote':
+                    expect(self.page.get_by_role('region', name='Quote check for evidence.jpeg')).to_contain_text('Photo received for review')
+                    expect(self.button('Copy request for garage')).to_have_count(0)
+                self.button('Attach image and continue').click()
+                with self.page.expect_response('**/api/intakes/save-draft') as saved:
+                    self.button('Save and continue later').click()
+                self.assertTrue(saved.value.ok)
+                draft = saved.value.request.post_data_json['draft']
+                doc, = draft['documents']
+                self.assertEqual((doc['kind'],doc['content_base64']), (kind, jpeg))
+                self.assertFalse(draft['values'].get('description'))
+                if kind == 'damage_photo':
+                    self.assertEqual(draft['notes']['photos'][0]['position'], 0)
+
+    def test_opening_rejects_invalid_signatures_and_pdf_size_and_keeps_the_prior_image(self):
+        picker = self.page.locator('#import-file')
+        picker.set_input_files({'name':'mislabeled.jpg','mimeType':'image/jpeg','buffer':b'not a JPEG'})
+        expect(self.page.get_by_role('alert')).to_be_visible()
+        expect(self.page.get_by_role('img', name='Preview of mislabeled.jpg')).to_have_count(0)
+        picker.set_input_files({'name':'large.pdf','mimeType':'application/pdf','buffer':b'%PDF-' + b'x' * (2*1024*1024)})
+        expect(self.page.get_by_role('alert')).to_contain_text('2 MiB')
+        picker.set_input_files(FIXTURES / 'photo-guide/wide.jpg')
+        expect(self.page.get_by_role('img', name='Preview of wide.jpg')).to_be_visible()
+        with self.page.expect_file_chooser() as chooser:
+            self.button('Replace file').click()
+        chooser.value.set_files({'name':'too-large.png','mimeType':'image/png','buffer':b'x' * (12*1024*1024 + 1)})
+        expect(self.page.get_by_role('alert')).to_contain_text('12 MiB')
+        expect(self.page.get_by_role('img', name='Preview of wide.jpg')).to_be_visible()
+
+    def test_receipt_assigns_a_submitted_camera_quote_to_review_without_requesting_it_again(self):
+        self.page.goto(self.origin + '/chat?demo=DEV-003')
+        self.button('Start sample claim').click()
+        self.upload('itemized_quote', FIXTURES / 'photo-guide/wide.jpg')
+        self.submit()
+        for _ in range(2):
+            expect(self.page.get_by_role('region', name='Quote check for wide.jpg')).to_contain_text('Photo received for review')
+            expect(self.page.get_by_role('region', name='Who acts next')).to_contain_text('Claims team')
+            expect(self.button('Copy request for garage')).to_have_count(0)
+            expect(self.button('Request a revised quote (optional)')).to_be_visible()
+            expect(self.button('Request breakdown from garage')).to_have_count(0)
+            self.page.reload()
+
+    def test_legacy_receipt_keeps_its_original_two_mib_limit(self):
+        receipt = {'status':'submitted', 'document_count':0, 'reference':'CLM-legacy-test',
+                   'documents':[], 'missing_documents':['incident_report','itemized_quote']}
+        self.page.route('**/api/intakes/resume', lambda route: route.fulfill(json=receipt))
+        self.page.goto(self.origin + '/chat#claim=' + 'f' * 64)
+        self.page.get_by_text('Add documents to this claim', exact=True).click()
+        self.page.locator('#doc-files').set_input_files({'name':'report.jpg','mimeType':'image/jpeg',
+                                                         'buffer':b'\xff\xd8\xff' + b'X' * (2*1024*1024)})
+        expect(self.page.get_by_role('alert')).to_contain_text('2 MiB')
+        expect(self.button('Send additional documents')).to_have_count(0)
+
+    def test_followup_accepts_a_large_camera_quote_as_original_evidence(self):
+        self.page.goto(self.origin + '/chat?demo=DEV-003')
+        self.button('Start sample claim').click()
+        self.submit()
+        self.page.get_by_text('Add documents to this claim', exact=True).click()
+        png = original_png()
+        self.upload('itemized_quote', {'name':'garage-photo.png', 'mimeType':'image/png', 'buffer':png})
+        staged = self.page.get_by_role('region', name='Quote check for garage-photo.png')
+        expect(staged).to_contain_text('Photo received for review')
+        with self.page.expect_response('**/api/intakes/add-documents') as sent:
+            self.button('Send additional documents').click()
+        self.assertTrue(sent.value.ok)
+        self.assertEqual(base64.b64decode(sent.value.request.post_data_json['documents'][0]['content_base64']), png)
+        expect(self.page.get_by_role('list', name='Received attachments')).to_contain_text('garage-photo.png')

@@ -14,6 +14,9 @@ from .store import RequestError, connect
 
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
+MAX_PHOTO_BYTES = 12 * 1024 * 1024
+# Base64 envelope for one original image, plus bounded JSON fields and the scoped link.
+EVIDENCE_FILE_REQUEST_LIMIT = 4 * ((MAX_PHOTO_BYTES + 2) // 3) + 64 * 1024
 REQUIRED_DOCUMENTS = ('incident_report', 'itemized_quote')
 DOCUMENT_KINDS = (*REQUIRED_DOCUMENTS, 'damage_photo')
 FORM_FIELDS = {'request_id', 'description', 'incident_date', 'location', 'policy_number',
@@ -47,8 +50,8 @@ def _validate_document(doc, *, enhanced=False):
     if signature is None:
         raise RequestError(400, 'Attach a PDF, PNG or JPEG file.')
 
-    large_photo = enhanced and doc['kind'] == 'damage_photo' and extension.lower() in ('png', 'jpg', 'jpeg')
-    maximum = 12 * 1024 * 1024 if large_photo else MAX_FILE_BYTES
+    large_photo = enhanced and extension.lower() in ('png', 'jpg', 'jpeg')
+    maximum = MAX_PHOTO_BYTES if large_photo else MAX_FILE_BYTES
     encoded = doc['content_base64']
     if not isinstance(encoded, str) or not 0 < len(encoded) <= 4 * ((maximum + 2) // 3):
         raise RequestError(400, f'Each attachment must contain a file of at most {maximum // (1024*1024)} MiB.')

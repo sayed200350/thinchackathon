@@ -3,6 +3,8 @@ import base64
 from contextlib import ExitStack
 import os
 from pathlib import Path
+import shutil
+import subprocess
 from tempfile import TemporaryDirectory
 from threading import Thread
 import unittest
@@ -82,7 +84,7 @@ class GarageHandoffUITests(unittest.TestCase):
         expect(garage.get_by_role('link', name='€1,800 itemized PDF')).to_be_visible()
         for private_text in ('DEV-003', 'driver@example.invalid', 'CLM-', claimant_token):
             self.assertNotIn(private_text, garage.locator('body').inner_text())
-        garage.get_by_label('Choose quote PDF').set_input_files(QUOTES / 'itemized-890.pdf')
+        garage.get_by_label('Choose a file or gallery photo').set_input_files(QUOTES / 'itemized-890.pdf')
         with garage.expect_response('**/api/garage/upload') as sent:
             garage.get_by_role('button', name='Send quote', exact=True).click()
         self.assertEqual(set(sent.value.request.post_data_json), {'token', 'document'})
@@ -104,7 +106,7 @@ class GarageHandoffUITests(unittest.TestCase):
         garage = self.phone()
         garage.route('**/api/garage/status', lambda route: route.fulfill(json={'status':'open', 'demo':False}))
         garage.goto(self.origin + '/garage#upload=valid-test-token')
-        picker = garage.get_by_label('Choose quote PDF')
+        picker = garage.get_by_label('Choose a file or gallery photo')
         expect(picker).to_be_visible()
         expect(garage.get_by_role('link', name='€890 itemized PDF')).to_have_count(0)
         expect(garage.get_by_role('button', name='Use €890 example')).to_have_count(0)
@@ -123,6 +125,100 @@ class GarageHandoffUITests(unittest.TestCase):
         self.assertIn('itemized-1800.pdf', picker.input_value())
         self.assertTrue(garage.evaluate('document.documentElement.scrollWidth <= innerWidth'))
 
+    def test_camera_and_gallery_can_retake_replace_remove_and_retry_the_original_photo(self):
+        garage = self.phone()
+        garage.route('**/api/garage/status', lambda route: route.fulfill(json={'status':'open', 'demo':False}))
+        garage.goto(self.origin + '/garage#upload=phone-test')
+        camera = garage.get_by_role('button', name='Take a photo', exact=True)
+        picker = garage.get_by_label('Choose a file or gallery photo')
+        self.assertIsNone(picker.get_attribute('capture', timeout=1500))
+        self.assertIn('image/png', picker.get_attribute('accept'))
+        quote_image = (QUOTES.parent / 'photo-guide/wide.jpg').read_bytes()
+        close_image = (QUOTES.parent / 'photo-guide/close-up.jpg').read_bytes()
+        photo = {'name':'page.jpeg', 'mimeType':'image/jpeg', 'buffer':quote_image}
+        with garage.expect_file_chooser() as chooser:
+            camera.click()
+        self.assertEqual(chooser.value.element.get_attribute('capture'), 'environment')
+        chooser.value.set_files(photo)
+        preview = garage.get_by_role('img', name='Quote photo preview')
+        expect(preview).to_be_visible()
+        self.assertGreater(preview.evaluate('image => image.naturalWidth'), 20)
+        with garage.expect_file_chooser() as retake:
+            garage.get_by_role('button', name='Retake photo').click()
+        self.assertEqual(retake.value.element.get_attribute('capture'), 'environment')
+        retake.value.set_files({'name':'closer.jpg','mimeType':'image/jpeg','buffer':close_image})
+        expect(garage.get_by_text('Ready to send · closer.jpg')).to_be_visible()
+        with garage.expect_file_chooser() as replace:
+            garage.get_by_role('button', name='Replace file').click()
+        self.assertIsNone(replace.value.element.get_attribute('capture'))
+        png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==')
+        replace.value.set_files({'name':'page.png','mimeType':'image/png','buffer':png})
+        expect(garage.get_by_text('Ready to send · page.png')).to_be_visible()
+        self.assertTrue(preview.get_attribute('src').startswith('data:image/png'))
+        garage.get_by_role('button', name='Remove file').click()
+        expect(preview).to_be_hidden()
+        expect(garage.get_by_role('button', name='Send quote')).to_be_disabled()
+        self.assertFalse(picker.input_value())
+
+        # Original bytes, including metadata/trailing bytes, survive preview and retries.
+        maximum_photo = quote_image.ljust(12 * 1024 * 1024, b'x')
+        picker.set_input_files({'name':'garage-camera.JPG','mimeType':'image/jpeg','buffer':maximum_photo})
+        expect(garage.get_by_text('Ready to send · garage-camera.JPG')).to_be_visible()
+        send = garage.get_by_role('button', name='Send quote')
+        garage.route('**/api/garage/upload', lambda route: route.fulfill(status=503))
+        send.click()
+        expect(garage.get_by_role('alert')).to_contain_text('try', ignore_case=True)
+        expect(send).to_be_enabled()
+        expect(preview).to_be_visible()
+        received = []
+        garage.unroute('**/api/garage/upload')
+        def capture(route):
+            document = route.request.post_data_json['document']
+            received.append((document['name'], document['kind'], base64.b64decode(document['content_base64'])))
+            route.fulfill(json={'status':'received'})
+        garage.route('**/api/garage/upload', capture)
+        send.click()
+        expect(garage.get_by_role('heading', name='Quote received')).to_be_visible()
+        self.assertEqual(received, [('garage-camera.JPG','itemized_quote',maximum_photo)])
+        self.assertNotIn('Your PDF', garage.locator('main').inner_text())
+
+    def test_wrong_photo_signatures_and_oversize_photos_cannot_be_sent(self):
+        garage = self.phone()
+        garage.route('**/api/garage/status', lambda route: route.fulfill(json={'status':'open', 'demo':False}))
+        garage.goto(self.origin + '/garage#upload=phone-test')
+        picker = garage.get_by_label('Choose a file or gallery photo')
+        jpeg = (QUOTES.parent / 'photo-guide/wide.jpg').read_bytes()
+        for name, data in [('wrong.png',jpeg), ('wrong.jpg',b'%PDF-fake'), ('unreadable.jpg',jpeg[:9]),
+                           ('camera.heic',jpeg), ('oversized.jpeg',jpeg.ljust(12*1024*1024 + 1, b'x'))]:
+            with self.subTest(name=name):
+                picker.set_input_files({'name':name, 'mimeType':'image/jpeg', 'buffer':data})
+                expect(garage.get_by_role('alert')).to_be_visible()
+                expect(garage.get_by_role('img', name='Quote photo preview')).to_be_hidden()
+                expect(garage.get_by_role('button', name='Send quote')).to_be_disabled()
+        self.assertTrue(garage.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+
+    @unittest.skipUnless(shutil.which('pdftoppm'), 'Rendering the photographed estimate requires Poppler.')
+    def test_four_mib_camera_quote_reaches_the_claim_through_the_phone_gateway(self):
+        driver, phone = self.phone(), self.phone()
+        driver.goto(self.origin + '/chat?demo=DEV-003')
+        for step in ('Start sample claim', 'Review claim', 'Submit claim', 'Request breakdown from garage'):
+            driver.get_by_role('button', name=step, exact=True).click()
+        phone.goto(driver.get_by_role('textbox', name='Garage upload link').input_value())
+        with phone.expect_file_chooser() as camera:
+            phone.get_by_role('button', name='Take a photo').click()
+        rendered = subprocess.check_output(['pdftoppm', '-f', '1', '-l', '1', '-scale-to', '800',
+                                            '-jpeg', str(QUOTES / 'itemized-890.pdf')], timeout=10)
+        photo = rendered.ljust(4 * 1024**2, b'\0')
+        camera.value.set_files({'name':'photographed-estimate.jpg', 'mimeType':'image/jpeg', 'buffer':photo})
+        expect(phone.get_by_role('img', name='Quote photo preview')).to_be_visible()
+        with phone.expect_response('**/api/garage/upload') as result:
+            phone.get_by_role('button', name='Send quote').click()
+        self.assertEqual(result.value.status, 200)
+        expect(phone.get_by_role('heading', name='Quote received')).to_be_visible()
+        driver.get_by_role('button', name='Refresh receipt').click()
+        expect(driver.get_by_role('list', name='Received attachments')).to_contain_text('photographed-estimate.jpg')
+        expect(driver.get_by_role('region', name='Quote check for photographed-estimate.jpg')).to_contain_text('Received from garage')
+
     def test_phone_closes_expired_urls_and_does_not_use_query_parameters(self):
         garage = self.phone()
         posts = []
@@ -136,7 +232,7 @@ class GarageHandoffUITests(unittest.TestCase):
         garage.goto(self.origin + '/garage#upload=expired-test-token')
         expect(garage.get_by_role('heading', name='Upload link unavailable')).to_be_visible()
         self.assertEqual(posts, [{'token':'expired-test-token'}])
-        expect(garage.get_by_label('Choose quote PDF')).to_be_hidden()
+        expect(garage.get_by_label('Choose a file or gallery photo')).to_be_hidden()
 
     def test_reopened_receipt_labels_garage_provenance_on_the_correct_version(self):
         page = self.phone()
@@ -170,7 +266,7 @@ class GarageHandoffUITests(unittest.TestCase):
             expect(send).to_be_disabled()
             garage.get_by_role('button', name=f'Use {amount} example', exact=True).click()
             expect(send).to_be_enabled()
-            self.assertIn(name, garage.get_by_label('Choose quote PDF').input_value())
+            self.assertIn(name, garage.get_by_label('Choose a file or gallery photo').input_value())
             expect(garage.get_by_text(f'Ready to send · {name}', exact=True)).to_be_visible()
             with garage.expect_response('**/api/garage/upload') as upload:
                 send.click()

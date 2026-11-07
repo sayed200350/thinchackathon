@@ -64,7 +64,7 @@ The evidence build adds quote version history, original photo dates, claimant ex
 
 On 7 November 2026, Thinc applied this migration and passed the rollback-only SQL check under the anonymous browser role. The test rows were rolled back.
 
-The enhanced claimant path accepts four initial attachments, preserves JPEG and PNG damage photos up to 12 MiB each and caps other files at 2 MiB each. A claim can hold up to 40 files including later paperwork. Submitted links return receipt details and next-action guidance. Staff retrieve original attachments using a reference and the reviewer key. The project URL and publishable key may be used by the Lovable frontend. Keep the evidence service credential on the backend. [HTTP contract](../api.md)
+For projects already running the evidence schema, apply [claim_image_sizes.sql](claim_image_sizes.sql) to enable larger photographed reports and quotes. Fresh installations include this limit. The enhanced claimant path accepts four initial attachments and preserves every original JPEG or PNG up to 12 MiB and each PDF up to 2 MiB. A claim can hold up to 40 files including later paperwork. Submitted links return receipt details and next-action guidance. Staff retrieve original attachments using a reference and the reviewer key. The project URL and publishable key may be used by the Lovable frontend. Keep the evidence service credential on the backend. [HTTP contract](../api.md)
 
 ## Find a submitted claim and its documents
 

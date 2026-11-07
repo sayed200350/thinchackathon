@@ -103,6 +103,8 @@ def _next_action(state):
     latest = state['quotes'][-1] if state['quotes'] else {}
     if state['decision']['recommendation'] == 'human_review':
         owner, message = 'claims_team', 'The claims team will review your claim.'
+    elif latest.get('review_required'):
+        owner, message = 'claims_team', 'The claims team will read the photographed estimate.'
     elif not state['facts']['incident_report_present']:
         owner, message = 'claimant', 'Please add the incident report using this link.'
     elif latest.get('status') != 'verified':
@@ -166,6 +168,7 @@ def _public(record):
                 'reason',
                 'garage_request',
                 'source',
+                'review_required',
             )
             if k in q
         }
@@ -178,7 +181,7 @@ def _public(record):
     missing = []
     if not state['facts']['incident_report_present']:
         missing.append('incident_report')
-    if not quotes or quotes[-1]['status'] != 'verified':
+    if not quotes or (quotes[-1]['status'] != 'verified' and not quotes[-1].get('review_required')):
         missing.append('itemized_quote')
     receipt['missing_documents'] = missing
     return receipt
