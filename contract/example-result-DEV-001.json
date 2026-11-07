@@ -3,14 +3,18 @@
   "case_status": "open",
   "policy_version": "v1",
   "recommendation": "routine_processing",
-  "matched_rule": "TBD (Regel aus Policy v1)",
+  "matched_rule": "v1.3",
   "supporting_facts": {
+    "policy_active_on_incident": true,
     "claim_type": "motor_own_damage",
     "repair_type": "standard",
     "quote_eur": 650,
     "incident_report_present": true,
     "itemized_quote_present": true,
-    "injury_reported": false
+    "injury_reported": false,
+    "liability_disputed": false,
+    "duplicate_flag": false,
+    "evidence_conflict": false
   },
-  "explanation": "Parkschaden 650 EUR mit vollständigen Unterlagen: Routinebearbeitung unter v1."
+  "explanation": "The €650 own-damage claim has active cover, both required documents and no review trigger, so it can enter routine processing."
 }

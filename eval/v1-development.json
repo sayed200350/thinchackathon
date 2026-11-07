@@ -1,0 +1,45 @@
+{
+  "policy_version": "v1",
+  "label_column": "expected_v1",
+  "accuracy": {
+    "count": 14,
+    "denominator": 14,
+    "rate": 1.0
+  },
+  "incorrect_routine_processing": {
+    "count": 0,
+    "denominator": 14,
+    "rate": 0.0
+  },
+  "unnecessary_human_review": {
+    "count": 0,
+    "denominator": 14,
+    "rate": 0.0
+  },
+  "cases_with_blank_facts": {
+    "case_ids": [
+      "DEV-013",
+      "DEV-014"
+    ],
+    "correct": 2,
+    "denominator": 2
+  },
+  "confusion_expected_by_predicted": {
+    "routine_processing": {
+      "routine_processing": 3,
+      "request_information": 0,
+      "human_review": 0
+    },
+    "request_information": {
+      "routine_processing": 0,
+      "request_information": 3,
+      "human_review": 0
+    },
+    "human_review": {
+      "routine_processing": 0,
+      "request_information": 0,
+      "human_review": 8
+    }
+  },
+  "errors": []
+}
