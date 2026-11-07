@@ -1,6 +1,6 @@
 # Status A
-- Arbeite an: noch nicht gestartet
-- Als Nächstes: Policy v1 in engine/ umsetzen, DEV-001 gegen contract/example-result-DEV-001.json
-- Blocker: keine
-- Letzte Änderung an contract/: keine
-- Stand: 2026-11-07 (Setup)
+- Arbeite an: Policy v1, CSV-Eingabe, Einzelergebnis und reproduzierbare Qualitätsmessung.
+- Als Nächstes: DEV-001 mit dem gemeinsamen Beispiel abgleichen und alle 14 Labels prüfen.
+- Blocker: keine für v1; offizielle Änderung für v2 steht aus.
+- Letzte Änderung an contract/: DEV-001-Präzisierung angekündigt.
+- Stand: 2026-11-07 13:27
