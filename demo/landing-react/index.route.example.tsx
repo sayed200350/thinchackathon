@@ -12,6 +12,11 @@ export const Route = createFileRoute("/")({
           "When the policy changes: which open motor claims need a second look, and why. Replay policy v1 against v2.",
       },
       { property: "og:title", content: "Policy Replay" },
+      {
+        property: "og:description",
+        content:
+          "When the policy changes: which open motor claims need a second look, and why. Replay policy v1 against v2.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
