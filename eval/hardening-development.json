@@ -1,0 +1,100 @@
+{
+  "policy_version": "v1",
+  "policy_fingerprint": "5421f441d3f296fb6951661922d106b77078c59b54b4a2815b42218c7e1fa38a",
+  "label_column": "expected_v1",
+  "accuracy": {
+    "count": 14,
+    "denominator": 14,
+    "rate": 1.0
+  },
+  "incorrect_routine_processing": {
+    "count": 0,
+    "denominator": 14,
+    "rate": 0.0
+  },
+  "unnecessary_human_review": {
+    "count": 0,
+    "denominator": 14,
+    "rate": 0.0
+  },
+  "recommendation_counts": {
+    "routine_processing": 3,
+    "request_information": 3,
+    "human_review": 8
+  },
+  "confusion": {
+    "routine_processing": {
+      "routine_processing": 3,
+      "request_information": 0,
+      "human_review": 0
+    },
+    "request_information": {
+      "routine_processing": 0,
+      "request_information": 3,
+      "human_review": 0
+    },
+    "human_review": {
+      "routine_processing": 0,
+      "request_information": 0,
+      "human_review": 8
+    }
+  },
+  "errors": [],
+  "missing_inputs": {
+    "count": 2,
+    "denominator": 14,
+    "cases": [
+      {
+        "case_id": "DEV-013",
+        "fields": [
+          "quote_eur"
+        ],
+        "recommendation": "request_information",
+        "primary_rule": "INFO_UNKNOWN_REQUIRED_FACT"
+      },
+      {
+        "case_id": "DEV-014",
+        "fields": [
+          "incident_report_present"
+        ],
+        "recommendation": "human_review",
+        "primary_rule": "HR_INJURY"
+      }
+    ]
+  },
+  "information_gaps_including_absent_documents": {
+    "count": 4,
+    "denominator": 14,
+    "cases": [
+      {
+        "case_id": "DEV-002",
+        "fields": [
+          "incident_report_present"
+        ],
+        "recommendation": "request_information"
+      },
+      {
+        "case_id": "DEV-003",
+        "fields": [
+          "itemized_quote_present"
+        ],
+        "recommendation": "request_information"
+      },
+      {
+        "case_id": "DEV-013",
+        "fields": [
+          "quote_eur"
+        ],
+        "recommendation": "request_information"
+      },
+      {
+        "case_id": "DEV-014",
+        "fields": [
+          "incident_report_present"
+        ],
+        "recommendation": "human_review"
+      }
+    ]
+  },
+  "limitation": "Only 14 labelled examples; this does not establish production accuracy."
+}

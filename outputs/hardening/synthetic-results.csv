@@ -1,0 +1,7 @@
+case_id,recommendation_v1,recommendation_v2,needs_recheck,rule_v1,rule_v2,explanation
+SYN-ROUTINE,routine_processing,,,ROUTINE_ALL_CHECKS_PASSED,,"Official v2 unavailable. routine_processing (v1, ROUTINE_ALL_CHECKS_PASSED); no known review trigger; unresolved: none. Next handling step only."
+SYN-MISSING,request_information,,,INFO_UNKNOWN_REQUIRED_FACT,,"Official v2 unavailable. request_information (v1, INFO_UNKNOWN_REQUIRED_FACT); no known review trigger; unresolved: quote_eur. Next handling step only."
+SYN-INJURY,human_review,,,HR_INJURY,,"Official v2 unavailable. human_review (v1, HR_INJURY); injury_reported: True == True = True; unresolved: incident_report_present. Next handling step only."
+SYN-BOUNDARY,routine_processing,,,ROUTINE_ALL_CHECKS_PASSED,,"Official v2 unavailable. routine_processing (v1, ROUTINE_ALL_CHECKS_PASSED); no known review trigger; unresolved: none. Next handling step only."
+SYN-CLOSED,routine_processing,routine_processing,False,ROUTINE_ALL_CHECKS_PASSED,ROUTINE_ALL_CHECKS_PASSED,"Closed claim: retained v1 classification computed for this exercise; no historical record supplied. routine_processing (v1, ROUTINE_ALL_CHECKS_PASSED); no known review trigger; unresolved: none. Next handling step only."
+SYN-EV,routine_processing,,,ROUTINE_ALL_CHECKS_PASSED,,"Official v2 unavailable. routine_processing (v1, ROUTINE_ALL_CHECKS_PASSED); no known review trigger; unresolved: none. Next handling step only."

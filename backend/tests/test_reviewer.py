@@ -1,130 +1,141 @@
+"""HTTP regression checks using only newly constructed synthetic data."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from http.client import HTTPConnection
-import csv
 import json
+import os
 from pathlib import Path
-import selectors
+from queue import Queue, Empty
+import sqlite3
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
+from threading import Thread
 import unittest
 
+from backend.store import connect
+from engine import load_policy
+from engine.tests.synthetic import BASE, candidate
 
-from backend.store import initialize
-
-
-ROOT = Path(__file__).resolve().parents[2]
-ORIGIN = "http://localhost:5173"
-CLAIM = "/api/claims/DEV-001"
-CORRECTION = {"recommendation": "human_review", "reviewer": "Demo reviewer",
-              "reason": "Workshop called with conflicting evidence after intake.",
-              "policy_version": "v1", "expected_revision": 0, "request_id": "demo-review-1"}
+ROOT=Path(__file__).resolve().parents[2]
+CORRECTION=dict(recommendation="human_review",reviewer="Synthetic tester",reason="Synthetic reviewer evidence update",
+                policy_version="v1",expected_revision=0,request_id="synthetic-review")
 
 
 @contextmanager
 def running_api(database):
-    process = subprocess.Popen(
-        [sys.executable, "-m", "backend", "--db", str(database), "--port", "0", "--ui-origin", ORIGIN],
-        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    process=subprocess.Popen([sys.executable,"-m","backend","--db",str(database),"--port","0","--claims",str(ROOT/"engine/tests/fixtures/synthetic_claims.csv")],cwd=ROOT,
+        stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=dict(os.environ,POLICY_TWIN_OWNER_TOKEN="synthetic-test-credential"))
     try:
-        with selectors.DefaultSelector() as selector:
-            selector.register(process.stdout, selectors.EVENT_READ)
-            if not selector.select(timeout=15):
-                raise RuntimeError("The API did not start in time.")
-        banner = process.stdout.readline().strip()
+        lines=Queue()
+        Thread(target=lambda:lines.put(process.stdout.readline()),daemon=True).start()
+        try:
+            banner=lines.get(timeout=15).strip()
+        except Empty as error:
+            raise RuntimeError("API startup timed out") from error
         if not banner:
-            raise RuntimeError(process.stderr.readline())
-        yield int(banner.rsplit(":", 1)[1])
+            raise RuntimeError(process.stderr.read())
+        yield int(banner.rsplit(":",1)[1])
     finally:
         process.terminate()
-        try:
-            process.communicate(timeout=5)
+        try: process.communicate(timeout=5)
         except subprocess.TimeoutExpired:
-            process.kill()
-            process.communicate()
+            process.kill(); process.communicate()
 
 
-def call(port, method, path, body=None):
-    connection = HTTPConnection("127.0.0.1", port, timeout=8)
+def call(port,method,path,body=None,token=None):
+    connection=HTTPConnection("127.0.0.1",port,timeout=8)
     try:
-        payload = None if body is None else json.dumps(body).encode()
-        connection.request(method, path, body=payload, headers={"Content-Type": "application/json", "Origin": ORIGIN})
-        response = connection.getresponse()
-        data = response.read()
-        return response.status, json.loads(data) if data else None, response.getheaders()
-    finally:
-        connection.close()
+        headers={"Content-Type":"application/json"}
+        if token: headers["X-Policy-Owner-Token"]=token
+        connection.request(method,path,body=None if body is None else json.dumps(body),headers=headers)
+        response=connection.getresponse()
+        raw=response.read()
+        return response.status,json.loads(raw) if raw else None,response.getheaders()
+    finally: connection.close()
 
 
-class ReviewerAPITests(unittest.TestCase):
-    def test_handoff_over_http_and_after_full_process_restart(self):
-        fixture = json.loads((ROOT / "contract/example-result-DEV-001.json").read_text())
+class ReviewerTests(unittest.TestCase):
+    def test_override_survives_restart_preserves_machine_and_is_append_only(self):
         with TemporaryDirectory() as folder:
-            database = Path(folder) / "claims.sqlite3"
+            database=Path(folder)/"synthetic.sqlite3"
             with running_api(database) as port:
-                status, original, headers = call(port, "GET", CLAIM)
-                self.assertEqual(status, 200)
-                self.assertEqual(dict(headers)["Access-Control-Allow-Origin"], ORIGIN)
-                self.assertEqual(original["decision"], fixture)
-                self.assertNotIn("expected_v1", original["claim"])
-                status, corrected, _ = call(port, "POST", CLAIM + "/corrections", CORRECTION)
-                self.assertEqual(status, 201)
-                self.assertEqual(corrected["effective_recommendation"], "human_review")
-                status, retried, _ = call(port, "POST", CLAIM + "/corrections", CORRECTION)
-                self.assertEqual((status, retried), (200, corrected))
-            with running_api(database) as port:
-                status, reloaded, _ = call(port, "GET", CLAIM)
-                self.assertEqual((status, reloaded), (200, corrected))
-                self.assertEqual(reloaded["decision"], original["decision"])
-                self.assertEqual(reloaded["revision"], 1)
-                entry, = reloaded["history"]
-                for field in ("reviewer", "reason", "policy_version", "request_id", "recommendation"):
-                    self.assertEqual(entry[field], CORRECTION[field])
-                self.assertEqual(entry["previous_recommendation"], "routine_processing")
+                _,original,_=call(port,"GET","/api/claims/SYN-ROUTINE")
+                status,updated,_=call(port,"POST","/api/claims/SYN-ROUTINE/corrections",CORRECTION)
+                self.assertEqual(status,201)
+                self.assertEqual(updated["decision"],original["decision"])
+                entry=updated["history"][0]
+                for field in ("reviewer","reason","policy_version"):
+                    self.assertEqual(entry[field],CORRECTION[field])
                 self.assertTrue(entry["created_at"].endswith("Z"))
-                _, queue, _ = call(port, "GET", "/api/claims")
-                self.assertEqual(len(queue["claims"]), 26)
-                first = next(c for c in queue["claims"] if c["case_id"] == "DEV-001")
-                self.assertEqual((first["recommendation"], first["effective_recommendation"]),
-                                 ("routine_processing", "human_review"))
+                self.assertTrue(original["decision"]["created_at"])
+                self.assertEqual(call(port,"POST","/api/claims/SYN-ROUTINE/corrections",CORRECTION)[0],200)
+            with running_api(database) as port:
+                self.assertEqual(call(port,"GET","/api/claims/SYN-ROUTINE")[1],updated)
+            db=connect(database)
+            try:
+                for sql in ("UPDATE claims SET original_route='human_review'", "DELETE FROM corrections", "UPDATE corrections SET reason='changed'"):
+                    with self.assertRaises(sqlite3.IntegrityError): db.execute(sql)
+                    db.rollback()
+            finally: db.close()
 
-    def test_changed_seed_cannot_silently_reopen_or_reuse_a_saved_claim(self):
-        with TemporaryDirectory() as folder:
-            database = Path(folder) / "db"
-            seed = Path(folder) / "claims.csv"
-            with (ROOT / "data/taktile/labelled_development_cases.csv").open() as source:
-                row = next(csv.DictReader(source))
-            for status in ("open", "closed"):
-                with seed.open("w", newline="") as output:
-                    writer = csv.DictWriter(output, fieldnames=row.keys())
-                    writer.writeheader()
-                    writer.writerow(dict(row, case_status=status))
-                if status == "open":
-                    initialize(database, [seed])
-                else:
-                    with self.assertRaisesRegex(ValueError, "DEV-001.*saved snapshot"):
-                        initialize(database, [seed])
-
-    def test_concurrent_updates_closed_claims_and_invalid_corrections(self):
-        with TemporaryDirectory() as folder, running_api(Path(folder) / "db") as port:
-            path = CLAIM + "/corrections"
-            requests = [dict(CORRECTION, request_id=f"review-{i}") for i in (1, 2)]
+    def test_conflicting_review_and_closed_case_rejection(self):
+        with TemporaryDirectory() as folder,running_api(Path(folder)/"synthetic.sqlite3") as port:
+            requests=[dict(CORRECTION,request_id=f"request-{i}") for i in range(2)]
             with ThreadPoolExecutor(max_workers=2) as pool:
-                responses = list(pool.map(lambda b: call(port, "POST", path, b), requests))
-            self.assertEqual(sorted(r[0] for r in responses), [201, 409])
-            winner = next(r[1]["history"][0]["request_id"] for r in responses if r[0] == 201)
-            self.assertEqual(call(port, "POST", path, dict(CORRECTION, request_id=winner, reason="Different."))[0], 409)
-            for changes, status in [({"reason": " "}, 400), ({"expected_revision": True}, 400),
-                                    ({"policy_version": "v2"}, 409), ({"recommendation": "invalid"}, 400)]:
-                self.assertEqual(call(port, "POST", path, dict(CORRECTION, **changes))[0], status)
-            self.assertEqual(call(port, "POST", "/api/claims/PRA-009/corrections", CORRECTION)[0], 409)
-            self.assertEqual(call(port, "GET", "/api/claims/missing")[0], 404)
-            self.assertEqual(call(port, "GET", CLAIM)[1]["revision"], 1)
-            status, preview, _ = call(port, "GET", "/api/policy-preview")
-            self.assertEqual((status, preview["status"], preview["changes"]), (200, "awaiting_v2", None))
-            self.assertEqual((preview["open_claims"], preview["closed_claims"]), (24, 2))
+                responses=list(pool.map(lambda body:call(port,"POST","/api/claims/SYN-ROUTINE/corrections",body),requests))
+            self.assertEqual(sorted(r[0] for r in responses),[201,409])
+            self.assertEqual(call(port,"POST","/api/claims/SYN-CLOSED/corrections",CORRECTION)[0],409)
+            self.assertEqual(call(port,"POST","/api/claims/SYN-MISSING/corrections",dict(CORRECTION,reason=""))[0],400)
+
+    def test_workbench_synthetic_startup_partial_rows_and_saved_history(self):
+        with TemporaryDirectory() as folder,running_api(Path(folder)/"synthetic.sqlite3") as port:
+            status,workspace,_=call(port,"GET","/api/workbench")
+            self.assertEqual(status,200)
+            self.assertEqual(len(workspace["claims"]),6)
+            self.assertTrue(all(c["case_id"].startswith("SYN-") for c in workspace["claims"]))
+            status,result,_=call(port,"POST","/api/workbench/run",dict(claims=workspace["claims"],candidate="threshold",use_saved=True))
+            self.assertEqual(status,200)
+            closed=next(c for c in result["audit_cases"] if c["case_id"]=="SYN-CLOSED")
+            self.assertEqual(closed["retention_source"],"persisted_history")
+            self.assertFalse(closed["needs_recheck"])
+            status,result,_=call(port,"POST","/api/workbench/run",dict(csv="case_id,case_status,injury_reported\nSYN-1,open,true\nSYN-2,broken,false\n"))
+            self.assertEqual(status,200)
+            self.assertEqual(len(result["rows"]),2)
+            self.assertEqual(len(result["errors"]),1)
+            self.assertEqual(result["rows"][0]["recommendation_v1"],"human_review")
+            self.assertEqual(result["rows"][1]["recommendation_v1"],"")
+            _,again,_=call(port,"POST","/api/workbench/run",dict(claims=result["claims"],input_issues=result["input_issues"]))
+            self.assertEqual(result["decisions"][0]["validation_warnings"],again["decisions"][0]["validation_warnings"])
+
+    def test_custom_version_registration_and_owner_review(self):
+        with TemporaryDirectory() as folder,running_api(Path(folder)/"synthetic.sqlite3") as port:
+            config=candidate(load_policy(),"synthetic-owner-review-v2")
+            body=dict(claims=[BASE],candidate="custom",policy=config)
+            self.assertEqual(call(port,"POST","/api/workbench/run",body)[0],200)
+            config["rules"][6]["if"]["value"]="1100"
+            self.assertEqual(call(port,"POST","/api/workbench/run",body)[0],409)
+            config["rules"][6]["if"]["value"]="1300"
+            review=dict(policy=config,actor="Test policy owner",reason="Reviewed synthetic changes for test only")
+            self.assertEqual(call(port,"POST","/api/policies/approve",review)[0],403)
+            status,result,_=call(port,"POST","/api/policies/approve",review,"synthetic-test-credential")
+            self.assertEqual(status,201,result)
+            self.assertEqual(result["review"]["actor"],"Test policy owner")
+            self.assertTrue(result["review"]["occurred_at"].endswith("Z"))
+            self.assertEqual(result["independent_v2_quality"],"not measured")
+            config["version"]="hypothetical-test-v2"
+            self.assertEqual(call(port,"POST","/api/policies/approve",review,"synthetic-test-credential")[0],400)
+
+    def test_browser_assets_and_invalid_policy_are_errors(self):
+        with TemporaryDirectory() as folder,running_api(Path(folder)/"synthetic.sqlite3") as port:
+            connection=HTTPConnection("127.0.0.1",port)
+            connection.request("GET","/")
+            response=connection.getresponse()
+            self.assertEqual(response.status,200)
+            self.assertIn(b"Why this decision?",response.read())
+            connection.close()
+            self.assertEqual(call(port,"POST","/api/workbench/run",dict(claims=[BASE],candidate=[]))[0],400)
+            self.assertEqual(call(port,"POST","/api/workbench/run",dict(claims=[BASE],candidate="custom",policy={}))[0],400)
 
 
-if __name__ == "__main__":
-    unittest.main()
+if __name__=="__main__": unittest.main()

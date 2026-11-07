@@ -1,0 +1,214 @@
+{
+  "policy_version": "v1",
+  "policy_fingerprint": "5421f441d3f296fb6951661922d106b77078c59b54b4a2815b42218c7e1fa38a",
+  "label_column": "expected_v1",
+  "accuracy": {
+    "count": 14,
+    "denominator": 14,
+    "rate": 1.0
+  },
+  "incorrect_routine_processing": {
+    "count": 0,
+    "denominator": 14,
+    "rate": 0.0
+  },
+  "unnecessary_human_review": {
+    "count": 0,
+    "denominator": 14,
+    "rate": 0.0
+  },
+  "recommendation_counts": {
+    "routine_processing": 3,
+    "request_information": 3,
+    "human_review": 8
+  },
+  "confusion": {
+    "routine_processing": {
+      "routine_processing": 3,
+      "request_information": 0,
+      "human_review": 0
+    },
+    "request_information": {
+      "routine_processing": 0,
+      "request_information": 3,
+      "human_review": 0
+    },
+    "human_review": {
+      "routine_processing": 0,
+      "request_information": 0,
+      "human_review": 8
+    }
+  },
+  "errors": [],
+  "missing_inputs": {
+    "count": 2,
+    "denominator": 14,
+    "cases": [
+      {
+        "case_id": "DEV-013",
+        "fields": [
+          "quote_eur"
+        ],
+        "recommendation": "request_information",
+        "primary_rule": "INFO_UNKNOWN_REQUIRED_FACT"
+      },
+      {
+        "case_id": "DEV-014",
+        "fields": [
+          "incident_report_present"
+        ],
+        "recommendation": "human_review",
+        "primary_rule": "HR_INJURY"
+      }
+    ]
+  },
+  "information_gaps_including_absent_documents": {
+    "count": 4,
+    "denominator": 14,
+    "cases": [
+      {
+        "case_id": "DEV-002",
+        "fields": [
+          "incident_report_present"
+        ],
+        "recommendation": "request_information"
+      },
+      {
+        "case_id": "DEV-003",
+        "fields": [
+          "itemized_quote_present"
+        ],
+        "recommendation": "request_information"
+      },
+      {
+        "case_id": "DEV-013",
+        "fields": [
+          "quote_eur"
+        ],
+        "recommendation": "request_information"
+      },
+      {
+        "case_id": "DEV-014",
+        "fields": [
+          "incident_report_present"
+        ],
+        "recommendation": "human_review"
+      }
+    ]
+  },
+  "limitation": "Only 14 labelled examples; this does not establish production accuracy.",
+  "case_results": [
+    {
+      "case_id": "DEV-001",
+      "expected": "routine_processing",
+      "actual": "routine_processing",
+      "correct": true,
+      "primary_rule": "ROUTINE_ALL_CHECKS_PASSED",
+      "explanation": "Recommendation: routine_processing; policy v1; primary rule ROUTINE_ALL_CHECKS_PASSED. policy_active_on_incident: True == False = False [HR_POLICY_INACTIVE]; claim_type: motor_own_damage != motor_own_damage = False [HR_CLAIM_TYPE]; injury_reported: False == True = False [HR_INJURY]; liability_disputed: False == True = False [HR_LIABILITY]; duplicate_flag: False == True = False [HR_DUPLICATE]; evidence_conflict: False == True = False [HR_EVIDENCE_CONFLICT]; quote_eur: 650 > 1500 = False [HR_QUOTE_LIMIT]; incident_report_present: True == False = False [INFO_INCIDENT_REPORT_MISSING]; itemized_quote_present: True == False = False [INFO_ITEMIZED_QUOTE_MISSING]; All review triggers were tested; none matched. All required structured facts and both documents are present. No review trigger or information gap remains; the policy's routine fallback applies. human_review excluded: Every review predicate was tested and returned NO_MATCH. request_information excluded: All required facts are known and required documents are present. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-002",
+      "expected": "request_information",
+      "actual": "request_information",
+      "correct": true,
+      "primary_rule": "INFO_INCIDENT_REPORT_MISSING",
+      "explanation": "Recommendation: request_information; policy v1; primary rule INFO_INCIDENT_REPORT_MISSING. incident_report_present: False == False = True [INFO_INCIDENT_REPORT_MISSING; Fictional motor claims policy v1 / decision order / rule 2 / INFO_INCIDENT_REPORT_MISSING]; incident_report_present=False (known; Required document is explicitly absent). No known human-review trigger matched; an information-request rule or missing/invalid required evidence takes precedence over routine processing. human_review excluded: No known review trigger matches; UNKNOWN does not prove a trigger false. routine_processing excluded: An information-request condition matches or required evidence is missing/invalid. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-003",
+      "expected": "request_information",
+      "actual": "request_information",
+      "correct": true,
+      "primary_rule": "INFO_ITEMIZED_QUOTE_MISSING",
+      "explanation": "Recommendation: request_information; policy v1; primary rule INFO_ITEMIZED_QUOTE_MISSING. itemized_quote_present: False == False = True [INFO_ITEMIZED_QUOTE_MISSING; Fictional motor claims policy v1 / decision order / rule 2 / INFO_ITEMIZED_QUOTE_MISSING]; itemized_quote_present=False (known; Required document is explicitly absent). No known human-review trigger matched; an information-request rule or missing/invalid required evidence takes precedence over routine processing. human_review excluded: No known review trigger matches; UNKNOWN does not prove a trigger false. routine_processing excluded: An information-request condition matches or required evidence is missing/invalid. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-004",
+      "expected": "human_review",
+      "actual": "human_review",
+      "correct": true,
+      "primary_rule": "HR_QUOTE_LIMIT",
+      "explanation": "Recommendation: human_review; policy v1; primary rule HR_QUOTE_LIMIT. quote_eur: 1800 > 1500 = True [HR_QUOTE_LIMIT; Fictional motor claims policy v1 / decision order / rule 1 / HR_QUOTE_LIMIT]. Known human-review triggers take precedence over information requests. request_information excluded: A known review trigger has higher precedence. routine_processing excluded: At least one known human-review rule matches. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-005",
+      "expected": "human_review",
+      "actual": "human_review",
+      "correct": true,
+      "primary_rule": "HR_POLICY_INACTIVE",
+      "explanation": "Recommendation: human_review; policy v1; primary rule HR_POLICY_INACTIVE. policy_active_on_incident: False == False = True [HR_POLICY_INACTIVE; Fictional motor claims policy v1 / decision order / rule 1 / HR_POLICY_INACTIVE]. Known human-review triggers take precedence over information requests. request_information excluded: A known review trigger has higher precedence. routine_processing excluded: At least one known human-review rule matches. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-006",
+      "expected": "human_review",
+      "actual": "human_review",
+      "correct": true,
+      "primary_rule": "HR_INJURY",
+      "explanation": "Recommendation: human_review; policy v1; primary rule HR_INJURY. injury_reported: True == True = True [HR_INJURY; Fictional motor claims policy v1 / decision order / rule 1 / HR_INJURY]. Known human-review triggers take precedence over information requests. request_information excluded: A known review trigger has higher precedence. routine_processing excluded: At least one known human-review rule matches. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-007",
+      "expected": "human_review",
+      "actual": "human_review",
+      "correct": true,
+      "primary_rule": "HR_LIABILITY",
+      "explanation": "Recommendation: human_review; policy v1; primary rule HR_LIABILITY. liability_disputed: True == True = True [HR_LIABILITY; Fictional motor claims policy v1 / decision order / rule 1 / HR_LIABILITY]. Known human-review triggers take precedence over information requests. request_information excluded: A known review trigger has higher precedence. routine_processing excluded: At least one known human-review rule matches. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-008",
+      "expected": "human_review",
+      "actual": "human_review",
+      "correct": true,
+      "primary_rule": "HR_DUPLICATE",
+      "explanation": "Recommendation: human_review; policy v1; primary rule HR_DUPLICATE. duplicate_flag: True == True = True [HR_DUPLICATE; Fictional motor claims policy v1 / decision order / rule 1 / HR_DUPLICATE]. Known human-review triggers take precedence over information requests. request_information excluded: A known review trigger has higher precedence. routine_processing excluded: At least one known human-review rule matches. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-009",
+      "expected": "human_review",
+      "actual": "human_review",
+      "correct": true,
+      "primary_rule": "HR_EVIDENCE_CONFLICT",
+      "explanation": "Recommendation: human_review; policy v1; primary rule HR_EVIDENCE_CONFLICT. evidence_conflict: True == True = True [HR_EVIDENCE_CONFLICT; Fictional motor claims policy v1 / decision order / rule 1 / HR_EVIDENCE_CONFLICT]. Known human-review triggers take precedence over information requests. request_information excluded: A known review trigger has higher precedence. routine_processing excluded: At least one known human-review rule matches. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-010",
+      "expected": "routine_processing",
+      "actual": "routine_processing",
+      "correct": true,
+      "primary_rule": "ROUTINE_ALL_CHECKS_PASSED",
+      "explanation": "Recommendation: routine_processing; policy v1; primary rule ROUTINE_ALL_CHECKS_PASSED. policy_active_on_incident: True == False = False [HR_POLICY_INACTIVE]; claim_type: motor_own_damage != motor_own_damage = False [HR_CLAIM_TYPE]; injury_reported: False == True = False [HR_INJURY]; liability_disputed: False == True = False [HR_LIABILITY]; duplicate_flag: False == True = False [HR_DUPLICATE]; evidence_conflict: False == True = False [HR_EVIDENCE_CONFLICT]; quote_eur: 1500 > 1500 = False [HR_QUOTE_LIMIT]; incident_report_present: True == False = False [INFO_INCIDENT_REPORT_MISSING]; itemized_quote_present: True == False = False [INFO_ITEMIZED_QUOTE_MISSING]; All review triggers were tested; none matched. All required structured facts and both documents are present. No review trigger or information gap remains; the policy's routine fallback applies. human_review excluded: Every review predicate was tested and returned NO_MATCH. request_information excluded: All required facts are known and required documents are present. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-011",
+      "expected": "routine_processing",
+      "actual": "routine_processing",
+      "correct": true,
+      "primary_rule": "ROUTINE_ALL_CHECKS_PASSED",
+      "explanation": "Recommendation: routine_processing; policy v1; primary rule ROUTINE_ALL_CHECKS_PASSED. policy_active_on_incident: True == False = False [HR_POLICY_INACTIVE]; claim_type: motor_own_damage != motor_own_damage = False [HR_CLAIM_TYPE]; injury_reported: False == True = False [HR_INJURY]; liability_disputed: False == True = False [HR_LIABILITY]; duplicate_flag: False == True = False [HR_DUPLICATE]; evidence_conflict: False == True = False [HR_EVIDENCE_CONFLICT]; quote_eur: 900 > 1500 = False [HR_QUOTE_LIMIT]; incident_report_present: True == False = False [INFO_INCIDENT_REPORT_MISSING]; itemized_quote_present: True == False = False [INFO_ITEMIZED_QUOTE_MISSING]; All review triggers were tested; none matched. All required structured facts and both documents are present. No review trigger or information gap remains; the policy's routine fallback applies. human_review excluded: Every review predicate was tested and returned NO_MATCH. request_information excluded: All required facts are known and required documents are present. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-012",
+      "expected": "human_review",
+      "actual": "human_review",
+      "correct": true,
+      "primary_rule": "HR_CLAIM_TYPE",
+      "explanation": "Recommendation: human_review; policy v1; primary rule HR_CLAIM_TYPE. claim_type: theft != motor_own_damage = True [HR_CLAIM_TYPE; Fictional motor claims policy v1 / decision order / rule 1 / HR_CLAIM_TYPE]. Known human-review triggers take precedence over information requests. request_information excluded: A known review trigger has higher precedence. routine_processing excluded: At least one known human-review rule matches. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-013",
+      "expected": "request_information",
+      "actual": "request_information",
+      "correct": true,
+      "primary_rule": "INFO_UNKNOWN_REQUIRED_FACT",
+      "explanation": "Recommendation: request_information; policy v1; primary rule INFO_UNKNOWN_REQUIRED_FACT. quote_eur=UNKNOWN (missing; Absent structured fact). No known human-review trigger matched; an information-request rule or missing/invalid required evidence takes precedence over routine processing. human_review excluded: No known review trigger matches; UNKNOWN does not prove a trigger false. routine_processing excluded: An information-request condition matches or required evidence is missing/invalid. This is a next-handling-step recommendation, not payment approval."
+    },
+    {
+      "case_id": "DEV-014",
+      "expected": "human_review",
+      "actual": "human_review",
+      "correct": true,
+      "primary_rule": "HR_INJURY",
+      "explanation": "Recommendation: human_review; policy v1; primary rule HR_INJURY. injury_reported: True == True = True [HR_INJURY; Fictional motor claims policy v1 / decision order / rule 1 / HR_INJURY]; incident_report_present=UNKNOWN (missing; Absent structured fact). Known human-review triggers take precedence over information requests. The listed information gaps remain unresolved and are retained for the reviewer. request_information excluded: A known review trigger has higher precedence. routine_processing excluded: At least one known human-review rule matches. This is a next-handling-step recommendation, not payment approval."
+    }
+  ]
+}

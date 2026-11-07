@@ -6,6 +6,8 @@ Policy Replay will help a motor-insurance reviewer answer one question when a po
 
 ## Run the reviewer API
 
+For the browser workbench, run `python -m backend --open` and use **http://127.0.0.1:8765**. On Windows you can also double-click `backend/start-workbench.cmd`. It includes sample claims, editable facts, CSV upload, policy comparison, downloads, and saved reviewer corrections. See the [browser workbench guide](backend/README.md). Python 3.10+ is required; no extra packages are needed.
+
 From the repository root, start the local service with Python 3.9 or newer:
 
 ```sh

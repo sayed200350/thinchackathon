@@ -1,0 +1,126 @@
+{
+  "policy_id": "fictional_motor_claims",
+  "version": "hypothetical-v2-threshold",
+  "precedence": [
+    "human_review",
+    "request_information",
+    "routine_processing"
+  ],
+  "fallback": "routine_processing",
+  "unknown_handling": {
+    "required_fields": [
+      "policy_active_on_incident",
+      "claim_type",
+      "repair_type",
+      "quote_eur",
+      "incident_report_present",
+      "itemized_quote_present",
+      "injury_reported",
+      "liability_disputed",
+      "duplicate_flag",
+      "evidence_conflict"
+    ],
+    "outcome": "request_information"
+  },
+  "rules": [
+    {
+      "id": "HR_POLICY_INACTIVE",
+      "priority": 10,
+      "then": "human_review",
+      "reason": "The policy was inactive on the incident date",
+      "if": {
+        "field": "policy_active_on_incident",
+        "op": "eq",
+        "value": false
+      }
+    },
+    {
+      "id": "HR_CLAIM_TYPE",
+      "priority": 20,
+      "then": "human_review",
+      "reason": "The claim falls outside motor own-damage cover",
+      "if": {
+        "field": "claim_type",
+        "op": "ne",
+        "value": "motor_own_damage"
+      }
+    },
+    {
+      "id": "HR_INJURY",
+      "priority": 30,
+      "then": "human_review",
+      "reason": "An injury was reported",
+      "if": {
+        "field": "injury_reported",
+        "op": "eq",
+        "value": true
+      }
+    },
+    {
+      "id": "HR_LIABILITY",
+      "priority": 40,
+      "then": "human_review",
+      "reason": "Liability is disputed",
+      "if": {
+        "field": "liability_disputed",
+        "op": "eq",
+        "value": true
+      }
+    },
+    {
+      "id": "HR_DUPLICATE",
+      "priority": 50,
+      "then": "human_review",
+      "reason": "The claim is flagged as a duplicate",
+      "if": {
+        "field": "duplicate_flag",
+        "op": "eq",
+        "value": true
+      }
+    },
+    {
+      "id": "HR_EVIDENCE_CONFLICT",
+      "priority": 60,
+      "then": "human_review",
+      "reason": "The evidence conflicts",
+      "if": {
+        "field": "evidence_conflict",
+        "op": "eq",
+        "value": true
+      }
+    },
+    {
+      "id": "HR_QUOTE_LIMIT",
+      "priority": 70,
+      "then": "human_review",
+      "reason": "The repair quote exceeds EUR 1200 (hypothetical test policy)",
+      "if": {
+        "field": "quote_eur",
+        "op": "gt",
+        "value": "1200"
+      }
+    },
+    {
+      "id": "INFO_INCIDENT_REPORT_MISSING",
+      "priority": 80,
+      "then": "request_information",
+      "reason": "The incident report is absent",
+      "if": {
+        "field": "incident_report_present",
+        "op": "eq",
+        "value": false
+      }
+    },
+    {
+      "id": "INFO_ITEMIZED_QUOTE_MISSING",
+      "priority": 90,
+      "then": "request_information",
+      "reason": "The itemized quote is absent",
+      "if": {
+        "field": "itemized_quote_present",
+        "op": "eq",
+        "value": false
+      }
+    }
+  ]
+}
