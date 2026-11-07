@@ -1,4 +1,5 @@
 """Verify insurer discovery through the HTTP API, including existing submissions."""
+from contextlib import closing
 from pathlib import Path
 import secrets
 import sqlite3
@@ -76,7 +77,7 @@ class StaffInboxTests(unittest.TestCase):
 
     def test_time_ties_and_new_arrivals_between_pages_include_legacy_detail(self):
         refs = [self.post('intakes',claim())['reference'] for _ in range(3)]
-        with sqlite3.connect(self.db) as db:
+        with closing(sqlite3.connect(self.db)) as db, db:
             db.execute("update intake_submissions set received_at='2025-09-11T10:00:00.000Z'")
         first=self.staff(limit=2)
         self.assertIsInstance(first['next_cursor'],str)
