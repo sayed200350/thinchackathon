@@ -15,6 +15,8 @@ Run `python3 -m backend` from the repository root with Python 3.9+ and open the 
 
 The backend reads labelled fields from the first 12 text pages using Poppler’s `pdftotext`. For image-only PDFs it can try OCR on the first two pages using `pdftoppm` and Tesseract with English language data. On macOS, `brew install poppler tesseract` installs the readers. Claimants can attach a protected or unreadable file and enter the answers manually. Intake uses no model credentials. The local server listens on loopback. Cross-device links from a published app must point to its reachable HTTPS origin.
 
+In the voice demo, a claimant speaks to ElevenLabs in their browser. With their permission, Vonage texts the private document-upload link to the team’s verified demo phone. [Set up the voice and SMS demo](backend/VOICE.md).
+
 ## Review the fictional demo cases
 
 Open the [reviewer workspace](http://127.0.0.1:8765/reviewer).
