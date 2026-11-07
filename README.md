@@ -83,7 +83,11 @@ For a rehearsal with a private SQLite copy, run `python3 -m backend --store sqli
 
 ## Run the reviewer API
 
-From the repository root, start the local service with Python 3.9 or newer:
+Mo’s engine evaluates the submitted claim and each revised garage quote under policy v1. The insurer can open the claim by its existing reference to inspect which rules matched, what evidence was missing, and why the recommendation changed.
+
+To try a policy change locally, run `python3 -m backend --open` and open the [policy workbench](http://127.0.0.1:8767). Upload the supplied Word policy and the [synthetic claims](engine/tests/fixtures/synthetic_claims.csv) to compare decisions and download their explanations. The workbench starts empty and uses a separate SQLite database. [Workbench guide](backend/README.md)
+
+From the repository root, start the local service with Python 3.10 or newer:
 
 ```sh
 python3 -m backend --ui-origin http://localhost:5173

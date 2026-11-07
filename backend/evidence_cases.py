@@ -6,7 +6,7 @@ import hashlib
 import json
 from uuid import uuid4
 
-from engine.policy import decide
+from engine import assess_v1, decision_summary
 from .intake import UUID_V4, validate_intake
 from .intake_links import _documents, _draft, _key, _revision, append_documents
 from .quote_evidence import assess_quote, demo_facts
@@ -135,13 +135,15 @@ def _extend(state, documents, notes, offset):
         quote = dict(assess_quote(doc), version=len(state['quotes']) + 1, position=pos)
         state['quotes'].append(quote)
         facts.update(quote_eur=quote['amount_eur'], itemized_quote_present=quote['itemized'])
-        decision = decide(facts)
+        decision = assess_v1(facts)
         state['history'].append(dict(quote_version=quote['version'], decision=decision, created_at=timestamp))
-    state['decision'] = decide(facts)
     if not quotes:
         state['history'].append(
-            dict(quote_version=len(state['quotes']), decision=state['decision'], created_at=timestamp)
+            dict(quote_version=len(state['quotes']), decision=assess_v1(facts), created_at=timestamp)
         )
+    # Receipts and inbox pages need the compact decision. Keep the engine trace
+    # once per revision in private history, exactly as it stood at submission.
+    state['decision'] = decision_summary(state['history'][-1]['decision'])
     state['next_action'] = _next_action(state)
     return state
 

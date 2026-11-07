@@ -1,6 +1,7 @@
 """Original decisions and append-only reviewer history in a local SQLite database."""
 
 from contextlib import closing
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -23,7 +24,27 @@ def connect(database: Path) -> sqlite3.Connection:
     return db
 
 
-def initialize(database: Path, sources: list) -> None:
+def _initialize_workbench(db):
+    from .policies import initialize_registry, register
+    from engine.runtime import load_policy
+    initialize_registry(db)
+    register(db, load_policy())
+    from . import changes, adaptation
+    changes.initialize(db)
+    adaptation.initialize(db)
+    db.executescript("""
+        CREATE TRIGGER IF NOT EXISTS claims_no_update BEFORE UPDATE ON claims
+        BEGIN SELECT RAISE(ABORT, 'Original machine decisions are immutable'); END;
+        CREATE TRIGGER IF NOT EXISTS claims_no_delete BEFORE DELETE ON claims
+        BEGIN SELECT RAISE(ABORT, 'Original machine decisions are immutable'); END;
+        CREATE TRIGGER IF NOT EXISTS corrections_no_update BEFORE UPDATE ON corrections
+        BEGIN SELECT RAISE(ABORT, 'Corrections are append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS corrections_no_delete BEFORE DELETE ON corrections
+        BEGIN SELECT RAISE(ABORT, 'Corrections are append-only'); END;
+    """)
+
+
+def initialize(database: Path, sources: list, *, workbench=False) -> None:
     database.parent.mkdir(parents=True, exist_ok=True)
     with closing(connect(database)) as db, db:
         db.execute("PRAGMA journal_mode = WAL")
@@ -49,9 +70,16 @@ def initialize(database: Path, sources: list) -> None:
                 UNIQUE (case_id, request_id)
             );
         """)
+        if workbench:
+            _initialize_workbench(db)
         for path in sources:
             for row in read_claims(path):
-                result = decide(row)
+                if workbench:
+                    from engine import assess_v1
+                    result = assess_v1(row)
+                    result["created_at"] = datetime.now(timezone.utc).isoformat()
+                else:
+                    result = decide(row)
                 claim = {k: row.get(k) for k in ("case_id", "case_status", "claim_summary", *FIELDS)}
                 added = db.execute("""INSERT INTO claims VALUES (?, ?, ?, ?, ?)
                                       ON CONFLICT(case_id) DO NOTHING""",
@@ -63,6 +91,10 @@ def initialize(database: Path, sources: list) -> None:
                     if json.loads(stored["claim_json"]) != claim:
                         raise ValueError(f"{result['case_id']}: input differs from its saved snapshot. "
                                          "Use the original CSV or start with a new --db path.")
+                elif workbench:
+                    from .changes import event
+                    event(db, "claim_created", "csv_import", {"claim": claim, "recommendation": result["recommendation"]},
+                                  result["case_id"], result["policy_version"])
 
 
 def claim_list(db):
@@ -112,7 +144,7 @@ def validate_correction(body):
     return values, expected
 
 
-def save_correction(db, case_id, body):
+def save_correction(db, case_id, body, *, workbench=False):
     values, expected = validate_correction(body)
 
     with db:
@@ -138,6 +170,9 @@ def save_correction(db, case_id, body):
              recommendation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (case_id, expected + 1, values["request_id"], values["reviewer"], values["reason"],
              values["policy_version"], detail["effective_recommendation"], values["recommendation"]))
+        if workbench:
+            from .changes import event
+            event(db, "reviewer_override_recorded", values["reviewer"], values, case_id, values["policy_version"])
         return 201, case_detail(db, case_id)
 
 
