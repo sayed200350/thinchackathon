@@ -4,11 +4,11 @@ argument-hint: <Ziel> [Anzahl Teammates]
 ---
 Ziel: `$ARGUMENTS`
 
-Ich bin Person `$TEAM_PERSON` (falls leer: abbrechen und `/join A` bzw. `/join B` empfehlen). Du bist der Team Lead `<ICH>-lead`.
+Ich bin Person `$TEAM_PERSON` (falls leer: abbrechen und `/join <PERSON>` empfehlen). Du bist der Team Lead `<ICH>-lead`.
 
 ## Vorbereitung (vor dem Spawnen)
 1. Sync aus `team/README.md` ausführen (pull, Inbox, Status, push).
-2. Lies `team/README.md`, `team/areas.md`, alles in `contract/`, die eigene Inbox `team/inbox/<ICH>/` und `team/status/<ANDERE>.md`. Berücksichtige offene Nachrichten mit `Antwort erwartet: ja`.
+2. Lies `team/README.md`, `team/areas.md`, alles in `contract/`, die eigene Inbox `team/inbox/<ICH>/` und den Status **aller** anderen Personen (`team/status/*.md` außer der eigenen). Berücksichtige offene Nachrichten mit `Antwort erwartet: ja`.
 
 ## Planung
 3. Zerlege das Ziel in Tasks. Lege pro Task `team/tasks/<ICH>-<NR>-<kurzname>.md` an (fortlaufende NR, Format aus `team/README.md`).
@@ -19,11 +19,11 @@ Ich bin Person `$TEAM_PERSON` (falls leer: abbrechen und `/join A` bzw. `/join B
 6. Erstelle ein Agent Team. Teammates heißen `<ICH>-<rolle>`. Gib jedem Teammate im Spawn-Prompt mit:
    - seine Tasks und die exakte Liste der Dateien, die er bearbeiten darf
    - relevante Teile aus `contract/`
-   - Regeln: nur zugewiesene Dateien ändern; mit anderen Teammates über die lokale Team-Mailbox reden; **nie** in `team/inbox/` schreiben; **nicht** committen/pushen; braucht er etwas von der anderen Person oder eine `contract/`-Änderung, meldet er es dem Lead; fertige Arbeit meldet er dem Lead.
+   - Regeln: nur zugewiesene Dateien ändern; mit anderen Teammates über die lokale Team-Mailbox reden; **nie** in `team/inbox/` schreiben; **nicht** committen/pushen; braucht er etwas von einer anderen Person oder eine `contract/`-Änderung, meldet er es dem Lead; fertige Arbeit meldet er dem Lead.
 
 ## Während der Arbeit
 7. Nur du committest und pushst, Format `[<ICH>/<agent>] Beschreibung`.
 8. Nach jedem abgeschlossenen Task: Task-Datei auf `fertig`, committen, Sync.
-9. Vor jeder Änderung an `contract/`: Sync, dann Änderung + Datei in `team/decisions/` + eine Nachricht an die andere Person (Typ `contract`).
-10. Kommunikation mit der anderen Person mäßig: nur contract, blocker, handoff, frage. Mehrere Punkte bündeln, beim nächsten Sync als eine Nachricht. Kein Status per Nachricht.
+9. Vor jeder Änderung an `contract/`: Sync, alle betroffenen Personen per Nachricht informieren (Typ `contract`, einzeln oder an `alle`), Datei in `team/decisions/`, dann Änderung.
+10. Kommunikation mit anderen Personen mäßig: nur contract, blocker, handoff, frage. Genau ein Empfänger pro Nachricht (`alle` nur bei contract). Mehrere Punkte pro Empfänger bündeln, beim nächsten Sync als eine Nachricht. Kein Status per Nachricht.
 11. Am Ende: Teammates beenden, letzter Sync, kurze Zusammenfassung an den Nutzer.
