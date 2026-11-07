@@ -41,7 +41,7 @@
 .pr-root *, .pr-root *::before, .pr-root *::after { box-sizing: border-box; }
 :where(.pr-root) h1, :where(.pr-root) h2 { margin: 0; font-weight: 500; letter-spacing: 0; line-height: 1.04; text-wrap: balance; }
 :where(.pr-root) p { margin: 0; }
-.pr-root ::selection { background: var(--pr-accent); color: var(--pr-fg); }
+.pr-root ::selection { background: oklch(0.87 0.15 150 / 0.32); color: oklch(0.985 0 0); }
 :where(.pr-root) a { color: inherit; }
 :where(.pr-root) button, :where(.pr-root) input { font: inherit; color: inherit; }
 .pr-mono { font-family: var(--pr-mono); font-feature-settings: "tnum" 1; }
