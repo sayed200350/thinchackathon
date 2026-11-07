@@ -17,7 +17,7 @@ class RequestError(Exception):
 
 
 def connect(database: Path) -> sqlite3.Connection:
-    db = sqlite3.connect(database, timeout=5)
+    db = sqlite3.connect(database, timeout=5, factory=SQLiteSession)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys = ON")
     return db
@@ -95,7 +95,7 @@ def case_detail(db, case_id):
     }
 
 
-def save_correction(db, case_id, body):
+def validate_correction(body):
     if not isinstance(body, dict):
         raise RequestError(400, "Expected a JSON object.")
     values = {}
@@ -109,6 +109,11 @@ def save_correction(db, case_id, body):
         raise RequestError(400, "expected_revision must be a nonnegative integer.")
     if values["recommendation"] not in ROUTES:
         raise RequestError(400, "Unknown recommendation.")
+    return values, expected
+
+
+def save_correction(db, case_id, body):
+    values, expected = validate_correction(body)
 
     with db:
         # Serialize revision check, idempotency check and audit insert across writers.
@@ -141,3 +146,12 @@ def preview(db):
     return {"status": "awaiting_v2", "from_version": "v1", "to_version": "v2",
             "open_claims": counts.get("open", 0), "closed_claims": counts.get("closed", 0),
             "changes": None}
+
+
+class SQLiteSession(sqlite3.Connection):
+    """Expose the reviewer store operations on a request-scoped SQLite connection."""
+
+    claim_list = claim_list
+    case_detail = case_detail
+    save_correction = save_correction
+    preview = preview

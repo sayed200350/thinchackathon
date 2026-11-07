@@ -6,7 +6,7 @@ from decimal import Decimal
 from engine import decide
 from engine.policy import FIELDS
 from . import chat_providers
-from .store import RequestError, case_detail, claim_list, preview
+from .store import RequestError
 from .supabase_seed import CLAUSES
 
 
@@ -136,7 +136,7 @@ def fact_value(value):
     return str(value)
 
 
-def answer(db, body):
+def answer(store, body):
     message, active, history = validate_request(body)
     ids = list(dict.fromkeys(f"{p.upper()}-{n.zfill(3)}" for p, n in CASE.findall(message)))
     response = {"case_id": active, "answer": "", "evidence": [], "suggestions": STARTERS.copy(),
@@ -148,7 +148,7 @@ def answer(db, body):
     detail = None
     if selected:
         try:
-            detail = case_detail(db, selected)
+            detail = store.case_detail(selected)
         except RequestError as error:
             if error.status != 404:
                 raise
@@ -174,7 +174,7 @@ def answer(db, body):
             response["model_usage"]["intent"] = "local"
     if intent in ("help", "queue", "replay"):
         if intent == "queue":
-            rows = claim_list(db)["claims"]
+            rows = store.claim_list()["claims"]
             text = message.casefold()
             status = next((s for s in ("open", "closed") if re.search(r"\b" + s + r"\b", text)), None)
             route = next((key for key, expression in (
@@ -189,11 +189,11 @@ def answer(db, body):
                 response["answer"] += " " + ", ".join(matching) + "."
                 response["suggestions"] = [f"Explain {k}" for k in matching[:3]]
             elif not status and not route:
-                counts = preview(db)
+                counts = store.preview()
                 response["answer"] += f' {counts["open_claims"]} open and {counts["closed_claims"]} closed.'
             response["evidence"] = [{"label": "Source", "value": "Current claims queue"}]
         elif intent == "replay":
-            counts = preview(db)
+            counts = store.preview()
             response["answer"] = (f'The official {counts["to_version"]} policy change is pending. '
                                   'There is no measured before-and-after result yet. '
                                   'I can run a hypothetical repair quote using v1.')

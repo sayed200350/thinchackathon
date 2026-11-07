@@ -1,7 +1,7 @@
 """Run the local Policy Replay HTTP service."""
 
 import argparse
-from contextlib import closing
+from contextlib import closing, nullcontext
 import csv
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -12,25 +12,44 @@ import sys
 from urllib.parse import unquote, urlsplit
 
 from .chat import answer
-from .store import RequestError, case_detail, claim_list, connect, initialize, preview, save_correction
+from .store import RequestError, connect, initialize
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCES = [ROOT / "data/taktile" / name for name in
                    ("labelled_development_cases.csv", "unlabelled_practice_cases.csv")]
-CHAT_SETTINGS = {"JEV_API_KEY", "JEV_MODEL", "OPENAI_API_KEY", "OPENAI_MODEL"}
+SERVER_SETTINGS = {"JEV_API_KEY", "JEV_MODEL", "OPENAI_API_KEY", "OPENAI_MODEL",
+                   "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY"}
 
 
-def load_chat_settings(path):
+def load_settings(path):
     if not path.is_file():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
         name, equals, value = line.partition("=")
         name, value = name.strip(), value.strip()
-        if equals and name in CHAT_SETTINGS:
+        if equals and name in SERVER_SETTINGS:
             if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
                 value = value[1:-1]
             os.environ.setdefault(name, value)
+
+
+def open_store_factory(mode, database, sources):
+    """Configure one data source for every route. Open SQLite per request."""
+    url = os.environ.get("SUPABASE_URL", "").strip()
+    key = (os.environ.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_ANON_KEY") or "").strip()
+    local_args = database is not None or sources is not None
+    if mode == "supabase" and local_args:
+        raise ValueError("--db and --claims select an offline SQLite database.")
+    if mode == "supabase" or (mode == "auto" and not local_args and (url or key)):
+        if not url or not key:
+            raise ValueError("Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or SUPABASE_ANON_KEY).")
+        from .supabase_store import SupabaseStore
+        store = SupabaseStore(url, key)
+        return "Supabase", lambda: nullcontext(store)
+    path = database or ROOT / "backend/.local/reviewer.sqlite3"
+    initialize(path, sources or DEFAULT_SOURCES)
+    return "SQLite", lambda: closing(connect(path))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -71,19 +90,19 @@ class Handler(BaseHTTPRequestHandler):
         parts = [unquote(p) for p in urlsplit(self.path).path.strip("/").split("/")]
         if self.command == "GET" and parts in ([""], ["chat"]):
             return 200, self.server.chat_page
-        with closing(connect(self.server.database)) as db:
+        with self.server.open_store() as store:
             if self.command == "GET":
                 if parts == ["api", "claims"]:
-                    return 200, claim_list(db)
+                    return 200, store.claim_list()
                 if parts == ["api", "policy-preview"]:
-                    return 200, preview(db)
+                    return 200, store.preview()
                 if len(parts) == 3 and parts[:2] == ["api", "claims"]:
-                    return 200, case_detail(db, parts[2])
+                    return 200, store.case_detail(parts[2])
             if self.command == "POST" and parts == ["api", "chat"]:
-                return 200, answer(db, self.read_json())
+                return 200, answer(store, self.read_json())
             if (self.command == "POST" and len(parts) == 4 and
                     parts[:2] == ["api", "claims"] and parts[3] == "corrections"):
-                return save_correction(db, parts[2], self.read_json())
+                return store.save_correction(parts[2], self.read_json())
         raise RequestError(404, "Unknown endpoint.")
 
     def handle_api(self):
@@ -106,18 +125,21 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--env-file", type=Path, default=ROOT / ".env", help="optional server model settings")
-    parser.add_argument("--db", type=Path, default=ROOT / "backend/.local/reviewer.sqlite3")
-    parser.add_argument("--claims", type=Path, nargs="+", default=DEFAULT_SOURCES)
+    parser.add_argument("--env-file", type=Path, default=ROOT / ".env", help="server settings")
+    parser.add_argument("--store", choices=("auto", "supabase", "sqlite"), default="auto",
+                        help="use configured Supabase by default, or select offline SQLite")
+    parser.add_argument("--db", type=Path, help="offline SQLite database path")
+    parser.add_argument("--claims", type=Path, nargs="+", help="CSV inputs for offline SQLite")
     parser.add_argument("--ui-origin", help="permitted browser origin, e.g. http://localhost:5173")
     args = parser.parse_args()
     try:
-        load_chat_settings(args.env_file)
-        initialize(args.db, args.claims)
+        load_settings(args.env_file)
+        storage, open_store = open_store_factory(args.store, args.db, args.claims)
         with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as server:
-            server.database = args.db
+            server.open_store = open_store
             server.chat_page = Path(__file__).with_name("chat.html").read_bytes()
             server.ui_origin = args.ui_origin
+            print(f"Reviewer data source: {storage}", file=sys.stderr, flush=True)
             print(f"Serving Policy Replay at http://127.0.0.1:{server.server_port}", flush=True)
             server.serve_forever()
     except KeyboardInterrupt:
