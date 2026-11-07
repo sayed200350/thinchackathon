@@ -1,8 +1,8 @@
 # Landing (React port)
 
-Animated landing for the Lovable reviewer app (`app/`): intro, ASCII colonnade with a live claim readout, claim-routing stage with a
+Animated landing for Retakt, the Lovable reviewer app (`app/`): intro, ASCII colonnade with a live claim readout, claim-routing stage with a
 draggable v1.1 threshold, clause diff, second-look cards, impact numbers and an editable cost sentence.
-Dark theme to match the app. Ported from `demo/landing/` (plain HTML/JS) and tested in a copy of the latest app
+Styled like the app (black, white accent, 16px cards, rim light). Ported from `demo/landing/` (plain HTML/JS) and tested in a copy of the latest app
 (`tsc`, `eslint`, `vitest` pass, no console errors, landing → `/queue` → logo → landing works).
 
 `app/` is owned by Lovable, so nothing here was applied to it. These files are ready to drop in.
@@ -16,6 +16,7 @@ Dark theme to match the app. Ported from `demo/landing/` (plain HTML/JS) and tes
 | `replay-engine.ts` | Canvas animation engine, framework-free. |
 | `landing-replay.tsx` | The page component `LandingReplay`. |
 | `landing-replay.css` | Styles, every selector prefixed `pr-`. |
+| `taktile-logo.tsx` | Taktile icon (five bars, taken from taktile.com/icon.svg), uses `currentColor`. |
 | `index.route.example.tsx` | Replacement for `app/src/routes/index.tsx`. |
 
 ## Apply it
@@ -27,6 +28,7 @@ Dark theme to match the app. Ported from `demo/landing/` (plain HTML/JS) and tes
 
 Needs nothing new: React, TanStack Router and the Inter Tight / JetBrains Mono fonts that `__root.tsx` already loads.
 The hero shows the app's existing `AsciiColumns` (`@/components/ascii-columns`) on the right, so that file must stay in `app/`.
+The nav shows the Taktile icon from `taktile-logo.tsx` (copy it to `app/src/components/`).
 
 ## Regenerate the data
 

@@ -64,20 +64,32 @@ const bezier = (a: number, b: number, c: number, d: number, t: number) => {
   return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;
 };
 
-// Dark palette. Orange is hard-coded on purpose: it marks "changed" and nothing else.
+// Palette mirrors the app: black, greys, white accent; only routine (green) carries colour.
 const C = {
-  ink: "#fdfcfc",
-  ink150: "#686565",
-  ink200: "#9a9797",
-  ink300: "#bebaba",
-  edge: "rgba(253,252,252,0.16)",
-  grid: "rgba(253,252,252,0.045)",
-  contrast: "#ff4d00",
-  card: "#0b0a0a",
+  ink: "#eeeeee",
+  ink150: "#4a4a4a",
+  ink200: "#989898",
+  ink300: "#bdbdbd",
+  edge: "rgba(255,255,255,0.10)",
+  grid: "rgba(255,255,255,0.035)",
+  contrast: "#ffffff",
+  card: "#000000",
   lane: {
-    routine_processing: { soft: "rgba(131,230,175,0.13)", line: "#83e6af", text: "#83e6af" },
-    request_information: { soft: "rgba(243,193,130,0.13)", line: "#f3c182", text: "#f3c182" },
-    human_review: { soft: "rgba(130,184,218,0.14)", line: "#82b8da", text: "#82b8da" },
+    routine_processing: {
+      soft: "rgba(134,240,159,0.12)",
+      line: "rgba(134,240,159,0.45)",
+      text: "#86f09f",
+    },
+    request_information: {
+      soft: "rgba(255,255,255,0.06)",
+      line: "rgba(255,255,255,0.22)",
+      text: "#e4e4e4",
+    },
+    human_review: {
+      soft: "rgba(255,255,255,0.03)",
+      line: "rgba(255,255,255,0.14)",
+      text: "#a4a4a4",
+    },
   } as Record<LandingRoute, { soft: string; line: string; text: string }>,
 };
 
@@ -521,7 +533,7 @@ export class ReplayEngine {
       for (let k = 1; k < t.trail.length; k++) {
         const p0 = t.trail[k - 1]!,
           p1 = t.trail[k]!;
-        ctx.strokeStyle = `rgba(255,77,0,${(k / t.trail.length) * 0.6})`;
+        ctx.strokeStyle = `rgba(255,255,255,${(k / t.trail.length) * 0.5})`;
         ctx.lineWidth = 1 + (k / t.trail.length) * 2;
         ctx.beginPath();
         ctx.moveTo(p0.x, p0.y);
@@ -570,7 +582,7 @@ export class ReplayEngine {
       if (t.flash > 0) {
         const r = (1 - t.flash) * 26;
         ctx.strokeStyle = changed
-          ? `rgba(255,77,0,${t.flash})`
+          ? `rgba(255,255,255,${t.flash * 0.8})`
           : `rgba(253,252,252,${t.flash * 0.35})`;
         ctx.lineWidth = 1;
         this.rr(x - r / 2, y - r / 2, L.tw + r, L.th + r, 4);
