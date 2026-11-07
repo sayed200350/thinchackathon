@@ -1,0 +1,71 @@
+/* Retakt UI kit: gemeinsame Tokens und Bausteine fuer alle Seiten.
+   Quelle: app/src/styles.css (dunkles Retakt-Theme, Glas-Karten, Punktraster). Keine Schatten ausser dem zarten Rand-Glow. */
+:root {
+  color-scheme: dark;
+  --background: oklch(0 0 0); --foreground: oklch(0.95 0 0);
+  --card: oklch(0.24 0 0 / 0.22); --card-solid: oklch(0.15 0 0); --popover: oklch(0.15 0 0);
+  --primary: oklch(0.985 0 0); --primary-foreground: oklch(0.13 0 0);
+  --muted: oklch(0.2 0 0); --muted-foreground: oklch(0.68 0 0);
+  --border: oklch(0.24 0 0); --input: oklch(0.26 0 0);
+  --destructive: oklch(0.68 0.19 25);
+  --edge-glow: 0 0 0 1px oklch(1 0 0 / 0.03), 0 0 8px oklch(1 0 0 / 0.025), inset 0 0 14px oklch(1 0 0 / 0.015);
+  --decision-fast: oklch(0.87 0.15 150); --decision-fast-soft: oklch(0.87 0.15 150 / 12%); --decision-fast-line: oklch(0.87 0.15 150 / 40%);
+  --decision-standard: oklch(0.92 0 0); --decision-standard-soft: oklch(1 0 0 / 6%); --decision-standard-line: oklch(1 0 0 / 20%);
+  --decision-reject: oklch(0.68 0.19 25); --decision-reject-soft: oklch(0.68 0.19 25 / 12%); --decision-reject-line: oklch(0.68 0.19 25 / 40%);
+  --font-sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  font: 16px/1.5 var(--font-sans); background: var(--background); color: var(--foreground);
+  -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
+}
+* { box-sizing: border-box; border-color: var(--border); }
+body {
+  margin: 0; min-height: 100vh; background-color: var(--background);
+  background-image:
+    radial-gradient(ellipse 120% 90% at 50% 35%, transparent 50%, oklch(0 0 0 / 0.75) 100%),
+    radial-gradient(circle, oklch(1 0 0 / 0.16) 1px, transparent 1.4px);
+  background-size: 100% 100%, 22px 22px; background-position: center, center; background-attachment: fixed, fixed;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; opacity: .5; }
+a { color: var(--foreground); text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid oklch(0.985 0 0 / .7); outline-offset: 2px; }
+[hidden] { display: none !important; }
+h1, h2, h3 { font-weight: 500; letter-spacing: 0; line-height: 1.04; text-wrap: balance; text-shadow: 0 0 14px oklch(1 0 0 / 0.05); }
+.eyebrow, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 12px; font-weight: 500; text-transform: uppercase; color: var(--muted-foreground); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Glas-Flaeche (Karten, Topbar, Eingaben-Container) */
+.glass { background: var(--card); border: 1px solid var(--border); -webkit-backdrop-filter: blur(2px) saturate(140%); backdrop-filter: blur(2px) saturate(140%); box-shadow: var(--edge-glow), inset 0 1px 0 oklch(1 0 0 / 0.045); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; -webkit-backdrop-filter: blur(2px) saturate(140%); backdrop-filter: blur(2px) saturate(140%); box-shadow: var(--edge-glow), inset 0 1px 0 oklch(1 0 0 / 0.045); }
+
+/* Schwebende Pillen-Topbar wie in der App */
+.topbar { position: fixed; z-index: 30; left: 12px; right: 12px; top: 12px; height: 48px; border-radius: 999px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: var(--card); border: 1px solid var(--border); -webkit-backdrop-filter: blur(2px) saturate(140%); backdrop-filter: blur(2px) saturate(140%); box-shadow: var(--edge-glow), inset 0 1px 0 oklch(1 0 0 / 0.045); }
+.topbar .brand { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; }
+.topbar .logo { width: 18px; height: 18px; color: var(--foreground); }
+.topbar .eyebrow { border-left: 1px solid var(--border); padding-left: 10px; }
+.page { max-width: 880px; margin: 0 auto; padding: 84px clamp(16px, 4vw, 40px) 48px; }
+
+/* Buttons und Formularfelder */
+.btn, .subtle-btn { background: transparent; border: 1px solid var(--border); border-radius: 4px; padding: 6px 12px; font-size: 13px; color: var(--foreground); text-decoration: none; display: inline-block; }
+.btn:hover, .subtle-btn:hover { background: var(--muted); border-color: var(--decision-standard-line); }
+.primary { padding: 8px 14px; color: var(--primary-foreground); background: var(--primary); border: 1px solid var(--primary); border-radius: 4px; font-weight: 500; font-size: 13px; }
+.primary:hover:enabled { background: oklch(0.9 0 0); }
+.chip { background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+.chip:hover { border-color: var(--decision-standard-line); background: var(--muted); }
+input, select, textarea { width: 100%; min-width: 0; padding: 8px 10px; border-radius: 4px; background: var(--popover); border: 1px solid var(--input); font: 400 14px var(--font-sans); color: var(--foreground); }
+input::placeholder, textarea::placeholder { color: var(--muted-foreground); }
+label.field { display: grid; gap: 4px; font: 500 12px var(--font-mono); text-transform: uppercase; color: var(--muted-foreground); }
+label.field > :not(span) { text-transform: none; }
+
+/* Entscheidungs-Badges (routine = fast gruen, request info = standard neutral, human review = reject rot) */
+.badge { display: inline-block; font: 500 11.5px var(--font-mono); padding: 2px 8px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+.badge.fast { color: var(--decision-fast); background: var(--decision-fast-soft); border-color: var(--decision-fast-line); }
+.badge.standard { color: var(--decision-standard); background: var(--decision-standard-soft); border-color: var(--decision-standard-line); }
+.badge.reject { color: var(--decision-reject); background: var(--decision-reject-soft); border-color: var(--decision-reject-line); }
+
+/* Hinweise */
+.notice { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--decision-standard-line); background: var(--decision-standard-soft); font-size: 14px; }
+.notice.ok { border-color: var(--decision-fast-line); background: var(--decision-fast-soft); }
+.notice.error { border-color: var(--decision-reject-line); background: var(--decision-reject-soft); color: var(--destructive); }

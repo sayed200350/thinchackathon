@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>Reviewer chat · Retakt</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* Tokens 1:1 aus app/src/styles.css (dunkles Retakt-Theme) */
+    :root {
+      color-scheme: dark;
+      --background: oklch(0 0 0); --foreground: oklch(0.95 0 0);
+      --card: oklch(0.24 0 0 / 0.22); --popover: oklch(0.15 0 0);
+      --primary: oklch(0.985 0 0); --primary-foreground: oklch(0.13 0 0);
+      --muted: oklch(0.2 0 0); --muted-foreground: oklch(0.68 0 0);
+      --border: oklch(0.24 0 0); --input: oklch(0.26 0 0);
+      --destructive: oklch(0.68 0.19 25);
+      --edge-glow: 0 0 0 1px oklch(1 0 0 / 0.03), 0 0 8px oklch(1 0 0 / 0.025), inset 0 0 14px oklch(1 0 0 / 0.015);
+      --decision-fast: oklch(0.87 0.15 150); --decision-fast-soft: oklch(0.87 0.15 150 / 12%); --decision-fast-line: oklch(0.87 0.15 150 / 40%);
+      --decision-standard: oklch(0.92 0 0); --decision-standard-soft: oklch(1 0 0 / 6%); --decision-standard-line: oklch(1 0 0 / 20%);
+      --decision-reject: oklch(0.68 0.19 25); --decision-reject-soft: oklch(0.68 0.19 25 / 12%); --decision-reject-line: oklch(0.68 0.19 25 / 40%);
+      --font-sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+      font: 16px/1.5 var(--font-sans); background: var(--background); color: var(--foreground);
+      -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
+    }
+    * { box-sizing: border-box; border-color: var(--border); }
+    body {
+      margin: 0; min-height: 100vh;
+      background-color: var(--background);
+      background-image:
+        radial-gradient(ellipse 120% 90% at 50% 35%, transparent 50%, oklch(0 0 0 / 0.75) 100%),
+        radial-gradient(circle, oklch(1 0 0 / 0.16) 1px, transparent 1.4px);
+      background-size: 100% 100%, 22px 22px; background-position: center, center; background-attachment: fixed, fixed;
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: default; opacity: .5; }
+    :focus-visible { outline: 2px solid oklch(0.985 0 0 / .7); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+    h1, h2 { font-weight: 500; letter-spacing: 0; line-height: 1.04; text-wrap: balance; text-shadow: 0 0 14px oklch(1 0 0 / 0.05); }
+    .eyebrow, .case, .sources, .arrow, .badge { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    /* Glasflaechen wie .bg-card.border */
+    .glass, .topbar, .composer, .correction, .record, .starter, .user {
+      background: var(--card); border: 1px solid var(--border);
+      -webkit-backdrop-filter: blur(2px) saturate(140%); backdrop-filter: blur(2px) saturate(140%);
+      box-shadow: var(--edge-glow), inset 0 1px 0 oklch(1 0 0 / 0.045);
+    }
+
+    .desk { height: 100vh; height: 100dvh; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+    .topbar {
+      position: fixed; z-index: 30; left: 12px; right: 12px; top: 12px; height: 48px; border-radius: 999px;
+      display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
+    }
+    .brand, .header-actions { display: flex; align-items: center; gap: 10px; }
+    .brand { font-size: 14px; font-weight: 500; }
+    .logo { width: 18px; height: 18px; color: var(--foreground); }
+    .eyebrow { font-size: 12px; font-weight: 500; text-transform: uppercase; color: var(--muted-foreground); border-left: 1px solid var(--border); padding-left: 10px; }
+    .case { font-size: 12px; padding: 4px 8px; border: 1px solid var(--decision-standard-line); background: var(--decision-standard-soft); border-radius: 4px; }
+    .subtle-btn {
+      background: transparent; border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; font-size: 12px;
+      color: var(--foreground); text-decoration: none; display: inline-block;
+    }
+    .subtle-btn:hover { background: var(--muted); border-color: var(--decision-standard-line); }
+    .scroll { overflow-y: auto; overscroll-behavior: contain; padding-top: 72px; }
+    .column { max-width: 810px; width: 100%; margin: 0 auto; padding-inline: clamp(16px, 4vw, 40px); }
+
+    .welcome { padding-block: clamp(32px, 9vh, 96px) 28px; }
+    h1 { font-size: clamp(36px, 5.5vw, 56px); margin: 10px 0 0; }
+    .intro { margin: 12px 0 28px; color: var(--muted-foreground); font-size: clamp(15px, 1.6vw, 17px); max-width: 52ch; }
+    .starters { display: grid; gap: 8px; }
+    .starter { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-radius: 12px; padding: 14px 16px; text-align: left; }
+    .starter:hover { border-color: var(--decision-standard-line); background: oklch(0.3 0 0 / 0.26); }
+    .arrow { color: var(--muted-foreground); font-size: 15px; }
+
+    .conversation { padding-block: 8px 24px; display: grid; gap: 22px; }
+    .turn { display: grid; gap: 10px; }
+    .user { margin: 0 0 4px auto; padding: 10px 14px; border-radius: 12px 12px 3px 12px; width: fit-content; max-width: 88%; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--decision-standard-soft); }
+    .byline { display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 12px; font-family: var(--font-mono); text-transform: uppercase; }
+    .byline::before { content: ""; width: 6px; height: 6px; background: var(--foreground); border-radius: 50%; box-shadow: 0 0 10px oklch(1 0 0 / .5); }
+    .answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 17px; line-height: 1.45; }
+    .evidence { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; background: var(--card); }
+    summary { cursor: pointer; color: var(--muted-foreground); font: 500 12px var(--font-mono); text-transform: uppercase; width: fit-content; }
+    dl { display: grid; grid-template-columns: minmax(90px, 30%) 1fr; gap: 6px 14px; margin: 10px 0 2px; }
+    dt { color: var(--muted-foreground); } dd { margin: 0; font-family: var(--font-mono); font-size: 12.5px; }
+    dt, dd { overflow-wrap: anywhere; }
+    .sources { color: var(--muted-foreground); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; margin: 8px 0 0; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 13px; text-align: left; }
+    .chip:hover { border-color: var(--decision-standard-line); background: var(--muted); }
+    .pending { color: var(--muted-foreground); margin: 0; }
+    .error { color: var(--destructive); margin: 5px 0 8px; }
+
+    .badge { display: inline-block; font-size: 11.5px; padding: 2px 8px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+    .badge.fast { color: var(--decision-fast); background: var(--decision-fast-soft); border-color: var(--decision-fast-line); }
+    .badge.standard { color: var(--decision-standard); background: var(--decision-standard-soft); border-color: var(--decision-standard-line); }
+    .badge.reject { color: var(--decision-reject); background: var(--decision-reject-soft); border-color: var(--decision-reject-line); }
+    .byline .badge { text-transform: none; margin-left: 2px; }
+
+    .correction { padding: 16px; border-radius: 12px; }
+    .correction h2 { margin: 0 0 8px; font-size: 18px; }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+    .fields label { display: grid; gap: 4px; font: 500 12px var(--font-mono); text-transform: uppercase; color: var(--muted-foreground); }
+    .wide { grid-column: 1 / -1; }
+    .fields input, .fields select, .fields textarea {
+      width: 100%; min-width: 0; padding: 8px 10px; border-radius: 4px; background: var(--popover); border: 1px solid var(--input);
+      font: 400 14px var(--font-sans); text-transform: none; color: var(--foreground);
+    }
+    .fields textarea { resize: vertical; min-height: 48px; }
+    .primary { padding: 8px 14px; color: var(--primary-foreground); background: var(--primary); border: 1px solid var(--primary); border-radius: 4px; font-weight: 500; font-size: 13px; }
+    .primary:hover:enabled { background: oklch(0.9 0 0); }
+    .correction .primary { margin-top: 12px; }
+    .record { padding: 14px 16px; border-radius: 12px; border-color: var(--decision-fast-line); background: var(--decision-fast-soft); font-size: 13px; }
+    .record strong { font-weight: 500; color: var(--decision-fast); }
+
+    .compose-wrap { padding-block: 10px max(14px, env(safe-area-inset-bottom)); }
+    .composer { display: flex; align-items: end; gap: 8px; border-radius: 14px; padding: 8px; }
+    .composer:focus-within { border-color: var(--decision-standard-line); }
+    .composer textarea { display: block; width: 100%; flex: 1; resize: none; padding: 6px 8px; border: 0; line-height: 1.4; background: transparent; min-height: 37px; max-height: 120px; }
+    .composer textarea:focus-visible { outline: none; }
+    .composer textarea::placeholder { color: var(--muted-foreground); }
+    .send { min-width: 72px; height: 37px; }
+    .keyboard-hint { margin: 6px 0 0 4px; font: 11px var(--font-mono); color: var(--muted-foreground); }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    @media (max-width: 580px) {
+      .eyebrow { display: none; } .keyboard-hint { display: none; } .fields { grid-template-columns: 1fr; } .user { max-width: 94%; }
+    }
+  </style>
+</head>
+<body>
+<div class="desk">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="29.245 29.245 80 80" fill="currentColor" aria-hidden="true"><path d="M29.245 29.245h16.667v80H29.245zM49.245 29.245h8.334v80h-8.334zM62.434 29.245h5.145v80h-5.145zM79.245 29.245h3.333v80h-3.333zM105.912 29.245h3.333v80h-3.333z"/></svg>
+      Retakt <span class="eyebrow">Reviewer chat</span>
+    </div>
+    <div class="header-actions"><a class="subtle-btn" id="evidence-link" href="#">Review evidence</a><span class="case" id="context" hidden></span><button class="subtle-btn" id="reset" type="button" hidden>New chat</button></div>
+  </header>
+  <main class="scroll" id="scroller">
+    <div class="column">
+      <section class="welcome" id="welcome">
+        <span class="eyebrow" style="border:0;padding:0">Claims review</span>
+        <h1>Ask about a claim.</h1>
+        <p class="intro">Trace a recommendation to the case facts and the policy that applies.</p>
+        <div class="starters" id="starters" aria-label="Suggested questions"></div>
+      </section>
+      <section class="conversation" id="transcript" aria-label="Conversation" hidden></section>
+    </div>
+  </main>
+  <footer class="compose-wrap">
+    <div class="column">
+      <form class="composer" id="composer">
+        <label for="question" class="sr-only">Your question</label>
+        <textarea id="question" rows="1" maxlength="2000" placeholder="Ask about a claim or policy rule…"></textarea>
+        <button class="primary send" id="send" type="submit" disabled>Send ↑</button>
+      </form>
+      <p class="keyboard-hint">Enter to send · Shift + Enter for a new line</p>
+    </div>
+  </footer>
+</div>
+<div id="status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<script>
+'use strict';
+const API = new URLSearchParams(location.search).get('api') || '';
+const el = (id) => document.getElementById(id);
+const transcript = el('transcript');
+const question = el('question');
+const storageKey = 'policy-replay.reviewer-chat.v1';
+const routes = {routine_processing:'Routine processing', request_information:'Request information', human_review:'Human review'};
+const starters = [
+  'Why does DEV-002 need more information?',
+  'Why is DEV-001 ready for routine processing?',
+  'What changed in policy v2?'
+];
+let caseId = null;
+let turns = [];
+let busy = false;
+
+function node(tag, className, text) {
+  const item = document.createElement(tag);
+  if (className) item.className = className;
+  if (text !== undefined && text !== null) item.textContent = text;
+  return item;
+}
+function button(label, className, action) {
+  const item = node('button',className,label);
+  item.type = 'button';
+  item.addEventListener('click',action);
+  return item;
+}
+function announce(text) { el('status').textContent = text; }
+function remember() {
+  try { sessionStorage.setItem(storageKey,JSON.stringify({caseId,turns:turns.filter(t => t.reply).slice(-20)})); }
+  catch (_) { /* Chat remains usable with browser storage disabled. */ }
+}
+function restore() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(storageKey));
+    if (saved && Array.isArray(saved.turns)) {
+      turns = saved.turns.filter(t => typeof t?.message === 'string' && typeof t.reply?.answer === 'string').slice(-20);
+      caseId = typeof saved.caseId === 'string' ? saved.caseId : null;
+    }
+  } catch (_) { /* A new session starts with an empty transcript. */ }
+}
+const badgeClass = {routine_processing:'fast',request_information:'standard',human_review:'reject'};
+function routeBadge(value) {
+  const key = Object.keys(routes).find(k => k === value || routes[k] === value);
+  return key ? node('span','badge ' + badgeClass[key],routes[key]) : null;
+}
+function fields(entries) {
+  const list = node('dl');
+  for (const [label,value] of entries) {
+    const cell = node('dd','');
+    const badge = typeof value === 'string' ? routeBadge(value) : null;
+    if (badge) cell.append(badge); else cell.textContent = value;
+    list.append(node('dt','',label),cell);
+  }
+  return list;
+}
+function updateFrame() {
+  const hasTurns = turns.length > 0;
+  el('welcome').hidden = hasTurns;
+  transcript.hidden = !hasTurns;
+  el('reset').hidden = !hasTurns;
+  el('reset').disabled = busy;
+  el('context').hidden = !caseId;
+  el('context').textContent = caseId || '';
+  el('context').setAttribute('aria-label','Current claim ' + (caseId || 'none'));
+  el('send').disabled = busy || !question.value.trim();
+}
+function readHistory() {
+  return turns.filter(t => t.reply).slice(-4).flatMap(t => [
+    {role:'user',content:t.message},{role:'assistant',content:t.reply.answer}
+  ]);
+}
+async function request(path,options) {
+  const response = await fetch(API + path,options);
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(typeof body.error === 'string' ? body.error : 'The request failed. Please try again.');
+    error.status = response.status;
+    throw error;
+  }
+  return body;
+}
+function post(data) {
+  return {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)};
+}
+function errorMessage(error) {
+  return error instanceof TypeError ? 'The connection was interrupted. Please try again.' : error.message;
+}
+function savedCorrection(turn, action, entry) {
+  const box = node('div','record');
+  box.append(node('strong','','Correction saved for ' + action.case_id),fields([
+    ['Previous decision',routes[entry.previous_recommendation] || entry.previous_recommendation],
+    ['Reviewer decision',routes[entry.recommendation] || entry.recommendation],
+    ['Reason',entry.reason],['Reviewer',entry.reviewer],['Policy',entry.policy_version],
+    ['Audit revision',entry.revision],['Recorded',entry.created_at]
+  ]));
+  if (turn.original) box.append(node('p','','Original engine decision: ' + (routes[turn.original] || turn.original) + '.'));
+  return box;
+}
+function correctionForm(turn,action) {
+  if (turn.saved) return savedCorrection(turn, action, turn.saved);
+  const form = node('form','correction');
+  const title = node('h2','','Correct ' + action.case_id);
+  const grid = node('div','fields');
+  const select = node('select');
+  const reviewer = node('input');
+  const reason = node('textarea');
+  const save = node('button','primary','Save correction');
+  save.type = 'submit';
+  const feedback = node('p','error');
+  feedback.hidden = true;
+  feedback.setAttribute('role','alert');
+  const reload = button('Reload claim','subtle-btn',reloadDetail);
+  reload.hidden = true;
+  function input(label,control,className) {
+    const wrapper = node('label',className,label);
+    control.required = true;
+    wrapper.append(control);
+    return wrapper;
+  }
+  function buildChoices() {
+    select.replaceChildren(new Option('Choose a recommendation',''));
+    for (const [value,label] of Object.entries(routes)) {
+      if (value !== action.current_recommendation) select.add(new Option(label,value));
+    }
+  }
+  buildChoices();
+  reviewer.autocomplete = 'off';
+  reason.rows = 2;
+  grid.append(input('New recommendation',select),input('Reviewer name',reviewer),input('Reason for the correction',reason,'wide'));
+  const current = node('p','byline','Current decision');
+  current.append(routeBadge(action.current_recommendation) || '');
+  form.append(title,current,grid,save,feedback,reload);
+  let draft = turn.draft || {};
+  function syncDraft() {
+    const next = {route:select.value,reviewer:reviewer.value,reason:reason.value,revision:action.revision};
+    if (draft.route === next.route && draft.reviewer === next.reviewer && draft.reason === next.reason && draft.revision === next.revision) {
+      next.id = draft.id;
+    }
+    draft = next;
+    turn.draft = draft;
+    remember();
+  }
+  select.value = draft.route || '';
+  reviewer.value = draft.reviewer || '';
+  reason.value = draft.reason || '';
+  form.addEventListener('input',syncDraft);
+  function disableInputs(value) {
+    for (const control of [select,reviewer,reason,save]) control.disabled = value;
+  }
+  async function reloadDetail() {
+    reload.disabled = true;
+    try {
+      const detail = await request('/api/claims/' + encodeURIComponent(action.case_id));
+      if (detail.decision?.case_status === 'closed') {
+        feedback.textContent = 'This claim is closed. Its decision is retained.';
+        reload.hidden = true;
+        return;
+      }
+      action.policy_version = detail.decision.policy_version;
+      action.revision = detail.revision;
+      action.current_recommendation = detail.effective_recommendation;
+      current.textContent = 'Current decision'; current.append(routeBadge(action.current_recommendation) || '');
+      buildChoices();
+      syncDraft();
+      feedback.textContent = 'Claim reloaded. Review the current decision and choose the correction again.';
+      reload.hidden = true;
+      disableInputs(false);
+      select.focus();
+    } catch (error) { feedback.textContent = errorMessage(error); }
+    finally { reload.disabled = false; }
+  }
+  if (busy) disableInputs(true);
+  form.addEventListener('submit',async event => {
+    event.preventDefault();
+    if (busy || save.disabled || !form.reportValidity()) return;
+    if (!reason.value.trim() || !reviewer.value.trim()) {
+      feedback.textContent = 'Enter a reviewer name and a reason.'; feedback.hidden = false; return;
+    }
+    syncDraft();
+    if (!draft.id) draft.id = crypto.randomUUID();
+    remember();
+    busy = true; disableInputs(true); updateFrame(); feedback.hidden = true; save.textContent = 'Saving…';
+    try {
+      const detail = await request('/api/claims/' + encodeURIComponent(action.case_id) + '/corrections',post({
+        recommendation:draft.route,reason:draft.reason.trim(),reviewer:draft.reviewer.trim(),policy_version:action.policy_version,
+        expected_revision:action.revision,request_id:draft.id
+      }));
+      const entry = detail.history?.find(record => record.request_id === draft.id);
+      if (!entry) throw new Error('The response did not contain the saved correction. Retry to check the audit history.');
+      turn.saved = entry; turn.original = detail.decision?.recommendation; delete turn.draft; remember();
+      form.replaceWith(savedCorrection(turn,action,entry));
+      announce('Correction saved for ' + action.case_id + '.'); question.focus();
+    } catch (error) {
+      feedback.textContent = errorMessage(error); feedback.hidden = false;
+      reload.hidden = error.status !== 409;
+      if (reload.hidden) disableInputs(false);
+      else reload.focus();
+    } finally {
+      busy = false; save.textContent = 'Save correction'; updateFrame();
+    }
+  });
+  return form;
+}
+function renderTurn(turn,index) {
+  const group = node('article','turn');
+  group.append(node('p','user',turn.message),node('div','byline','Retakt'));
+  if (!turn.reply) {
+    if (turn.error) {
+      group.append(node('p','error',turn.error));
+      if (index === turns.length-1) group.append(button('Retry message','subtle-btn',() => transmit(turn)));
+    } else group.append(node('p','pending','Checking the claim and policy…'));
+    return group;
+  }
+  const reply = turn.reply;
+  group.append(node('p','answer',reply.answer));
+  const evidence = (Array.isArray(reply.evidence) ? reply.evidence : []).filter(item => typeof item?.label === 'string' && typeof item.value === 'string');
+  if (evidence.length || reply.model_usage) {
+    const box = node('details','evidence');
+    box.open = evidence.length > 0;
+    box.append(node('summary','',evidence.length ? 'Evidence' : 'Answer source'));
+    if (evidence.length) box.append(fields(evidence.map(item => [item.label,item.value])));
+    const usage = reply.model_usage;
+    if (usage?.intent && usage?.answer) box.append(node('p','sources','Question routing · ' + usage.intent + '  |  Answer · ' + usage.answer));
+    group.append(box);
+  }
+  if (reply.action?.type === 'review_correction') group.append(correctionForm(turn,reply.action));
+  if (index === turns.length-1 && Array.isArray(reply.suggestions) && reply.suggestions.length) {
+    const chips = node('div','suggestions');
+    for (const suggestion of reply.suggestions.filter(s => typeof s === 'string')) {
+      chips.append(button(suggestion,'chip',() => start(suggestion)));
+    }
+    group.append(chips);
+  }
+  return group;
+}
+function render() {
+  transcript.replaceChildren(...turns.map(renderTurn));
+  updateFrame();
+}
+function scrollToTurn() { transcript.lastElementChild?.scrollIntoView({block:'start'}); }
+async function transmit(turn) {
+  if (busy) return;
+  busy = true; turn.error = null; render(); scrollToTurn(); announce('Checking the claim and policy.');
+  try {
+    const result = await request('/api/chat',post(turn.request));
+    if (typeof result.answer !== 'string' || !result.answer.trim()) throw new Error('The assistant returned an empty answer. Please retry.');
+    turn.reply = result;
+    delete turn.request;
+    caseId = typeof result.case_id === 'string' ? result.case_id : null;
+    remember();
+    announce('Policy Replay: ' + result.answer);
+  } catch (error) {
+    turn.error = errorMessage(error);
+    announce(turn.error);
+  } finally {
+    busy = false; render(); scrollToTurn();
+  }
+}
+function start(content) {
+  if (busy || !content.trim()) return;
+  const message = content.trim();
+  const turn = {message,request:{message,case_id:caseId,history:readHistory()}};
+  turns.push(turn);
+  question.value = ''; resize(); question.focus(); transmit(turn);
+}
+function resize() {
+  question.style.height = 'auto';
+  question.style.height = Math.min(question.scrollHeight,120) + 'px';
+  updateFrame();
+}
+for (const text of starters) {
+  const item = button(text,'starter',() => start(text));
+  const arrow = node('span','arrow','↗'); arrow.setAttribute('aria-hidden','true'); item.append(arrow);
+  el('starters').append(item);
+}
+el('composer').addEventListener('submit',event => { event.preventDefault(); start(question.value); });
+question.addEventListener('input',resize);
+question.addEventListener('keydown',event => {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    if (!event.repeat) start(question.value);
+  }
+});
+el('reset').addEventListener('click',() => {
+  if (busy) return;
+  caseId = null; turns = []; question.value = ''; remember(); render(); resize(); question.focus();
+  announce('New conversation.');
+});
+restore(); render(); resize();
+if (turns.length) el('scroller').scrollTop = el('scroller').scrollHeight;
+</script>
+<script>document.getElementById('evidence-link').href = API + '/reviewer/evidence';</script>
+</body>
+</html>

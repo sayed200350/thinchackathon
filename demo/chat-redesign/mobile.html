@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Retakt · Mobile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --fg: oklch(0.95 0 0); --muted: oklch(0.68 0 0);
+      --font-sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+      font: 16px/1.5 var(--font-sans); background: #070707; color: var(--fg);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; overflow: hidden; display: grid; place-items: center;
+      background: radial-gradient(ellipse 70% 80% at 50% 45%, oklch(0.2 0 0) 0%, oklch(0.11 0 0) 55%, #050505 100%);
+    }
+    /* Animierter ASCII-Hintergrund (Canvas, siehe Skript unten) */
+    #bg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+    .stage { position: relative; z-index: 1; }
+    .stage-inner { display: grid; justify-items: center; gap: 18px; }
+    .caption { text-align: center; }
+    .eyebrow { font: 500 12px var(--font-mono); text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+    .caption h1 { margin: 4px 0 0; font-size: 22px; font-weight: 500; line-height: 1.1; text-shadow: 0 0 18px oklch(1 0 0 / .12); }
+
+    /* Skalierung passt das Geraet an die Fensterhoehe an (JS setzt --s) */
+    .fit { width: calc(390px * var(--s, 1)); height: calc(844px * var(--s, 1)); }
+    .phone {
+      width: 390px; height: 844px; transform: scale(var(--s, 1)); transform-origin: top left;
+      position: relative; border-radius: 56px; padding: 12px;
+      background: linear-gradient(145deg, oklch(0.32 0 0), oklch(0.16 0 0) 40%, oklch(0.26 0 0));
+      box-shadow: 0 0 0 1.5px oklch(1 0 0 / .16) inset, 0 0 0 4px oklch(0.08 0 0), 0 0 0 5px oklch(1 0 0 / .1), 0 0 90px oklch(1 0 0 / .09), 0 50px 90px -20px #000;
+    }
+    /* Seitentasten */
+    .phone::before, .phone::after { content: ""; position: absolute; width: 4px; border-radius: 2px; background: oklch(0.28 0 0); }
+    .phone::before { left: -7px; top: 150px; height: 56px; box-shadow: 0 78px 0 oklch(0.28 0 0); }
+    .phone::after { right: -7px; top: 200px; height: 92px; }
+    .screen { position: relative; width: 100%; height: 100%; border-radius: 44px; overflow: hidden; background: #000; display: grid; grid-template-rows: 50px minmax(0, 1fr) 24px; }
+    .status {
+      display: flex; align-items: center; justify-content: space-between; padding: 14px 30px 0 34px;
+      font: 500 15px var(--font-sans); color: #fff; background: #000; position: relative; z-index: 2;
+    }
+    .island { position: absolute; left: 50%; top: 11px; width: 112px; height: 32px; transform: translateX(-50%); background: #000; border-radius: 20px; box-shadow: 0 0 0 1px oklch(1 0 0 / .06); z-index: 3; }
+    .icons { color: #fff; display: flex; align-items: center; gap: 6px; }
+    .icons svg { height: 12px; width: auto; fill: currentColor; }
+    iframe { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+    .home { display: grid; place-items: center; background: #000; }
+    .home span { width: 134px; height: 5px; border-radius: 3px; background: oklch(0.95 0 0 / .85); }
+  </style>
+</head>
+<body>
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <div class="stage"><div class="stage-inner">
+    <div class="caption">
+      <span class="eyebrow">Mobile app preview</span>
+      <h1>Retakt Reviewer</h1>
+    </div>
+    <div class="fit" id="fit">
+      <div class="phone">
+        <div class="screen">
+          <div class="status">
+            <span id="clock">9:41</span>
+            <div class="island" aria-hidden="true"></div>
+            <div class="icons" aria-hidden="true">
+              <svg viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+              <svg viewBox="0 0 17 12"><path d="M8.5 2.3c2.3 0 4.4.9 6 2.4l1-1.1A10.4 10.4 0 0 0 8.5.7 10.4 10.4 0 0 0 1.5 3.6l1 1.1a8.8 8.8 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1-1.1a7.2 7.2 0 0 0-9.2 0l1 1.1c1-.9 2.2-1.4 3.6-1.4zm0 3.3c.6 0 1.2.2 1.6.6L8.5 11.6 6.9 9.6c.4-.4 1-.6 1.6-.6z"/></svg>
+              <svg viewBox="0 0 27 13" style="height:13px"><rect x=".5" y=".5" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="19" height="9" rx="2.2"/><rect x="24" y="4.2" width="2" height="4.6" rx="1" opacity=".45"/></svg>
+            </div>
+          </div>
+          <iframe src="/reviewer" title="Retakt reviewer chat" allow="clipboard-write"></iframe>
+          <div class="home"><span></span></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+  <script>
+
+    /* ASCII-Feld: fliessendes fBm-Rauschen als Zeichenrampe, Scanband ("Replay"), Policy-Woerter, Cursor-Welle */
+    (() => {
+      const cv = document.getElementById('bg'), cx = cv.getContext('2d');
+      const RAMP = ' .\u00b7:-=+*#%@', CW = 10, CH = 18, WORDS = ['routine_processing', 'request_information', 'human_review', 'v1 \u2192 v2', 'rule v1.3', 'needs_recheck', 'closed: retained', 'policy v2'];
+      const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
+      const noise = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), u = (x - xi) ** 2 * (3 - 2 * (x - xi)), v = (y - yi) ** 2 * (3 - 2 * (y - yi));
+        const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; };
+      const fbm = (x, y) => .55 * noise(x, y) + .3 * noise(x * 2.1, y * 2.1) + .15 * noise(x * 4.3, y * 4.3);
+      let W, H, cols, rows, dpr, mouse = { x: -1e4, y: -1e4 }, ripples = [], rows_words = [];
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      function size() {
+        dpr = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+        cv.width = W * dpr; cv.height = H * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cols = Math.ceil(W / CW); rows = Math.ceil(H / CH); cx.font = '12px "JetBrains Mono", ui-monospace, monospace'; cx.textBaseline = 'top';
+        rows_words = Array.from({ length: Math.max(3, Math.floor(rows / 7)) }, (_, i) => ({ row: 3 + i * 7 + (i % 3), word: WORDS[i % WORDS.length], speed: 6 + (i % 4) * 3, off: hash(i, 7) * cols * 2, dir: i % 2 ? 1 : -1 }));
+      }
+      addEventListener('resize', size); size();
+      addEventListener('pointermove', e => { mouse = { x: e.clientX, y: e.clientY }; });
+      addEventListener('pointerdown', e => ripples.push({ x: e.clientX, y: e.clientY, t: performance.now() }));
+      let last = 0;
+      function frame(now) {
+        if (!reduce) requestAnimationFrame(frame);
+        if (document.hidden || now - last < 33) return; last = now;
+        const t = reduce ? 40 : now / 1000;
+        cx.clearRect(0, 0, W, H);
+        const scan = ((t * 0.07) % 1.4) - 0.2;  // Scanband wandert von oben nach unten
+        const mx = mouse.x / CW, my = mouse.y / CH;
+        ripples = ripples.filter(r => now - r.t < 1800);
+        for (let j = 0; j < rows; j++) {
+          const ny = j / rows;
+          for (let i = 0; i < cols; i++) {
+            const nx = i / cols;
+            let v = fbm(i * .045 + t * .06, j * .075 - t * .045);
+            v = Math.max(0, (v - .38) * 1.9);
+            // Vignette + Lichtkegel hinter dem Geraet: ruhig in der Mitte, lebendig an den Seiten
+            const dx = nx - .5, dy = ny - .5, r2 = dx * dx * 1.6 + dy * dy;
+            v *= .35 + Math.min(1, r2 * 3.2);
+            v *= 1 - Math.min(1, r2 * 1.1) * .55;
+            const band = Math.exp(-(((ny - scan) * 9) ** 2)); v += band * .45 * (.4 + fbm(i * .2, j * .2));
+            const md = Math.hypot(i - mx, (j - my) * 1.8); v += Math.max(0, 1 - md / 9) * .7;
+            for (const r of ripples) { const age = (now - r.t) / 1800, rr = age * 38, d = Math.abs(Math.hypot(i - r.x / CW, (j - r.y / CH) * 1.8) - rr); v += Math.max(0, 1 - d / 3) * (1 - age) * .9; }
+            if (v < .06) continue;
+            const k = Math.min(RAMP.length - 1, Math.floor(v * (RAMP.length - 1)));
+            if (!k) continue;
+            cx.fillStyle = `rgba(255,255,255,${Math.min(.26, .025 + v * .16).toFixed(3)})`;
+            cx.fillText(RAMP[k], i * CW, j * CH);
+          }
+        }
+        // Policy-Woerter treiben langsam durchs Bild
+        cx.fillStyle = 'rgba(255,255,255,.1)';
+        for (const w of rows_words) {
+          const len = w.word.length + 6, pos = ((w.off + w.dir * t * w.speed) % (cols + len) + cols + len) % (cols + len) - len;
+          cx.fillText(w.word, Math.round(pos) * CW, w.row * CH);
+        }
+      }
+      requestAnimationFrame(frame);
+    })();
+
+    const fit = document.getElementById('fit');
+    function resize() {
+      const s = Math.min(1, (window.innerHeight - 110) / 844, (window.innerWidth - 40) / 390);
+      fit.style.setProperty('--s', Math.max(0.4, s).toFixed(3));
+    }
+    function tick() {
+      const d = new Date();
+      document.getElementById('clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    addEventListener('resize', resize); resize(); tick(); setInterval(tick, 20000);
+  </script>
+</body>
+</html>
