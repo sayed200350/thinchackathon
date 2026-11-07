@@ -18,7 +18,9 @@ The demo works without model credentials. To enable the integrations, set `JEV_A
 
 ## Hosted database for Lovable
 
-The Thinc Supabase project serves the reviewer app. See the [connection details, schema and smoke test](contract/db/README.md) for the live project URL, frontend access, and the seeded v1 data.
+The reviewer API, chatbot and Lovable can share the Thinc Supabase project. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the publishable key) in the server’s ignored `.env`, then run `python3 -m backend --store supabase`. The server prints its active data source at startup. A saved correction appears in the shared claim’s history. Chat transcripts stay in the current browser tab. See the [database setup and verification](contract/db/README.md).
+
+For a rehearsal with a private SQLite copy, run `python3 -m backend --store sqlite`.
 
 ## Run the reviewer API
 

@@ -6,7 +6,9 @@
 python3 -m backend --ui-origin http://localhost:5173
 ```
 
-The local service listens at `http://127.0.0.1:8765`. Use your frontend’s actual origin for browser requests, or proxy `/api` from the frontend. The default SQLite database is `backend/.local/reviewer.sqlite3`. Startup seeds 26 fictional claims from the development and practice CSVs. Restarting with the same database preserves original decisions and reviewer history. Pass `--db PATH` for a separate demo database and `--claims FILE [FILE ...]` for other input files. An existing case ID with different source facts is reported at startup.
+The service listens at `http://127.0.0.1:8765`. Use your frontend’s origin for browser requests, or proxy `/api` from the frontend. With `SUPABASE_URL` and either `SUPABASE_PUBLISHABLE_KEY` or `SUPABASE_ANON_KEY` in the server environment or repo `.env`, every route uses the hosted project. Use `--store supabase` to require that configuration. An unavailable hosted database returns HTTP 503. See the [required migration](db/README.md).
+
+For an offline rehearsal, pass `--store sqlite`. The offline store seeds `backend/.local/reviewer.sqlite3` from the development and practice CSVs. Passing `--db PATH` or `--claims FILE [FILE ...]` also selects SQLite. Startup without any Supabase configuration defaults to SQLite. Each database keeps its own records.
 
 | Method and path | Response |
 | --- | --- |
@@ -34,7 +36,7 @@ Render `answer` and each `evidence` entry (`label`, `value`) as text. Each sugge
 
 `model_usage.intent` reports `Jev` or `local`. `model_usage.answer` reports `GPT` when it selects supporting statements and `policy engine` for local responses. Jev receives the question, recent conversation text and the available intents. GPT receives the question, recent conversation text and the verified candidate statements on explanatory turns. The model keys belong on the server. The engine reads recorded claim facts and computes every scenario result locally.
 
-The local chat and its correction form share SQLite. A published Lovable app needs a hosted chat endpoint reading the same claim and correction store as the rest of that app. The hosted Supabase project already contains the demo claims. Its publishable key alone cannot run this Python endpoint.
+In Supabase mode the chat, correction form and claim detail all read the shared audit history. Two backends can point to the same project. The Python service must be deployed to an HTTPS endpoint for a published Lovable app to call it. Conversation text and hypothetical results remain in the browser session.
 
 ## Save and verify a reviewer correction
 
