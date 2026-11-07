@@ -607,7 +607,7 @@
       }
     </style>
   </head>
-  <body>
+  <body data-voice-agent="">
     <header class="top">
       <div class="bar">
         <span class="wordmark"
@@ -1082,6 +1082,13 @@
         });
         const actions = el('div', 'actions');
         actions.append(button('Tell me what happened', '', () => setStep(0)));
+        const agent = document.body.dataset.voiceAgent;
+        if (agent) {
+          const call = el('a', 'sample', 'Try the voice demo');
+          call.href = 'https://elevenlabs.io/app/talk-to?agent_id=' + encodeURIComponent(agent);
+          call.referrerPolicy = 'no-referrer';
+          actions.append(call);
+        }
         const sample = el('a', 'sample', 'Download sample accident report');
         sample.href = '/sample-accident-report.pdf';
         sample.download = 'sample-accident-report.pdf';

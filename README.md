@@ -63,6 +63,8 @@ Open the [presenter chat](http://127.0.0.1:8766/chat?demo=DEV-003). Keep the Mac
 
 The PDF importer reads labelled fields on the first 12 text pages. It can try English OCR on the first two pages of an image-only report when `pdftoppm` and Tesseract are installed (`brew install tesseract` adds Tesseract on macOS). Quote verification requires readable PDF text, a printed euro total, and reconciling priced work. The claimant can attach an unreadable document and continue. Claimant documents and translations are processed on the service host.
 
+In the voice demo, a claimant speaks to ElevenLabs in their browser. With their permission, Vonage texts the private document-upload link to the team’s verified demo phone. [Set up the voice and SMS demo](backend/VOICE.md).
+
 ## Review the fictional demo cases
 
 Open the [reviewer workspace](http://127.0.0.1:8765/reviewer).

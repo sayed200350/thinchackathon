@@ -21,6 +21,7 @@ from .staff import staff_action, staff_correction
 from . import evidence_storage
 from .evidence_setup import credential
 from .store import RequestError, connect, initialize
+from .voice import SETTINGS as VOICE_SETTINGS, configured_voice
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,7 +29,7 @@ DEFAULT_SOURCES = [ROOT / "data/taktile" / name for name in
                    ("labelled_development_cases.csv", "unlabelled_practice_cases.csv")]
 SERVER_SETTINGS = {"JEV_API_KEY", "JEV_MODEL", "OPENAI_API_KEY", "OPENAI_MODEL",
                    "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY", "CLAIM_REVIEWER_KEY", "CLAIM_EVIDENCE_SERVICE_KEY",
-                   "GARAGE_PUBLIC_ORIGIN", "CLAIM_GARAGE_KEY"}
+                   "GARAGE_PUBLIC_ORIGIN", "CLAIM_GARAGE_KEY", "Vonage_API_Key"} | VOICE_SETTINGS
 INTAKE_REQUEST_LIMIT = 9 * 1024 * 1024  # Three 2 MiB files after base64 encoding, plus form fields.
 
 
@@ -89,7 +90,7 @@ class Handler(BaseHTTPRequestHandler):
         if data:
             self.wfile.write(data)
 
-    def read_json(self, max_bytes=65536):
+    def read_json_bytes(self, max_bytes):
         if self.headers.get_content_type() != "application/json":
             raise RequestError(415, "Send Content-Type: application/json.")
         try:
@@ -98,8 +99,11 @@ class Handler(BaseHTTPRequestHandler):
             raise RequestError(411, "A Content-Length header is required.")
         if not 0 < size <= max_bytes:
             raise RequestError(413, f"Expected a JSON body of at most {max_bytes // 1024} KiB.")
+        return self.rfile.read(size)
+
+    def read_json(self, max_bytes=65536):
         try:
-            return json.loads(self.rfile.read(size).decode("utf-8"))
+            return json.loads(self.read_json_bytes(max_bytes).decode("utf-8"))
         except (UnicodeError, ValueError, RecursionError):
             raise RequestError(400, "Malformed JSON.")
 
@@ -139,6 +143,12 @@ class Handler(BaseHTTPRequestHandler):
             if parts[2] not in ("status", "upload"):
                 raise RequestError(404, "Unknown garage operation.")
             return self.garage_request(parts[2])
+        if self.command == "POST" and parts == ["api", "voice", "post-call"]:
+            voice = getattr(self.server, "voice", None)
+            if voice is None:
+                raise RequestError(404, "Phone intake is disabled.")
+            return 200, voice.receive(self.read_json_bytes(2 * 1024 * 1024),
+                                      self.headers.get("ElevenLabs-Signature"))
         if self.command == "GET" and parts in ([""], ["chat"]):
             return 200, self.server.intake_page
         if self.command == "GET" and parts == ["reviewer"]:
@@ -258,13 +268,31 @@ def main():
             if storage == 'Supabase':
                 os.environ['CLAIM_EVIDENCE_SERVICE_KEY'] = credential(state_dir, 'CLAIM_EVIDENCE_SERVICE_KEY')
             server.open_store = open_store
+            server.voice = None
+            if os.getenv("ELEVENLABS_AGENT_ID"):
+                if storage == "SQLite":
+                    claims_path = args.db or ROOT / "backend/.local/reviewer.sqlite3"
+                    voice_queue = claims_path.with_name(claims_path.name + ".voice-queue")
+                else:
+                    host = urlsplit(os.environ["SUPABASE_URL"]).hostname
+                    voice_queue = ROOT / "backend/.local" / f"voice-{host}.sqlite3"
+                server.voice = configured_voice(open_store, voice_queue)
             server.intake_page = Path(__file__).with_name("intake.html").read_bytes()
+            if server.voice:
+                agent = server.voice.agent.encode("ascii")
+                server.intake_page = server.intake_page.replace(b'data-voice-agent=""',
+                                                                 b'data-voice-agent="' + agent + b'"', 1)
             server.sample_pdf = (ROOT / "backend/fixtures/sample-accident-report.pdf").read_bytes()
             server.reviewer_page = Path(__file__).with_name("chat.html").read_bytes()
             server.ui_origin = args.ui_origin
             print(f"Reviewer data source: {storage}", file=sys.stderr, flush=True)
             print(f"Serving Policy Replay at http://127.0.0.1:{server.server_port}", flush=True)
-            server.serve_forever()
+            stopped = server.voice.start() if server.voice else None
+            try:
+                server.serve_forever()
+            finally:
+                if stopped:
+                    stopped.set()
     except KeyboardInterrupt:
         return
     except (ValueError, OSError, csv.Error, sqlite3.Error) as error:
