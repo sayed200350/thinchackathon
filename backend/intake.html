@@ -515,6 +515,19 @@
       .file-info {
         flex: 1 1 115px;
       }
+      .evidence-note, .photo-detail, .assistance-panel {
+        flex: 1 0 100%;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        margin: 12px 0;
+        border-left: 3px solid var(--line);
+        padding: 6px 14px;
+      }
+      .evidence-note h3, .evidence-note p { margin: 4px 0 8px; }
+      .sample-docs { margin: 14px 0; }
+      .sample-links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+      .sample-docs a { color: var(--accent); }
+      .photo-guide img { max-width: 100%; height: auto; }
       .file-buttons {
         display: flex;
         flex-wrap: wrap;
@@ -615,6 +628,7 @@
       </form>
       <button type="button" id="keep-answer" class="btn quiet" hidden>Use this text as my claim answer</button>
     </dialog>
+    <script src="/assets/claim_assistance.js"></script>
     <script>
       'use strict';
       const fields = [
@@ -679,11 +693,13 @@
       const importStep = -2;
       const receiptStep = -3;
       const requiredKinds = ['incident_report', 'itemized_quote'];
-      const maxFiles = 3;
+      const maxFiles = 4;
+      const maxPhotoBytes = 12 * 1024 * 1024;
       const maxBytes = 2 * 1024 * 1024;
       const historyEl = document.querySelector('#history');
       const current = document.querySelector('#current');
       const stages = document.querySelector('#stages');
+      let demoCase = null;
       let step = welcomeStep;
       let editing = false;
       let values = {};
@@ -812,8 +828,8 @@
         current.inert = value;
       }
 
-      async function api(path, body) {
-        const resp = await fetch('/api/intakes/' + path, {
+      async function api(path, body, base = '/api/intakes/') {
+        const resp = await fetch(base + path, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -867,6 +883,9 @@
       }
 
       function drawProgress() {
+        document.querySelector('.sub').textContent = demoCase
+          ? 'Fictional sample claim · ' + demoCase
+          : 'Start with your accident report or tell us what happened.';
         const stage = receipt
           ? 4
           : step < 3
@@ -915,9 +934,11 @@
           : values[field.key];
       }
 
-      function validateFile(file, onlyPDF = false) {
-        if (!file || !file.size || file.size > maxBytes)
-          throw new Error('Choose a non-empty file up to 2 MiB.');
+      function validateFile(file, onlyPDF = false, kind = '') {
+        const photo = kind === 'damage_photo';
+        const sizeLimit = photo ? maxPhotoBytes : maxBytes;
+        if (!file || !file.size || file.size > sizeLimit)
+          throw new Error('Choose a non-empty file up to ' + (photo ? '12' : '2') + ' MiB.');
         if (
           !file.name.trim() ||
           file.name !== file.name.trim() ||
@@ -929,6 +950,8 @@
           );
         }
         const ext = file.name.toLowerCase().split('.').pop();
+        if (photo && !['png', 'jpg', 'jpeg'].includes(ext))
+          throw new Error('Choose a JPEG or PNG damage photo.');
         if (
           onlyPDF ? ext !== 'pdf' : !['png', 'jpg', 'jpeg', 'pdf'].includes(ext)
         ) {
@@ -971,7 +994,42 @@
         return choose;
       }
 
+      function sampleQuotes(card) {
+        const examples = el('details', 'sample-docs');
+        examples.append(el('summary', '', 'Download sample garage quotes'));
+        const list = el('ul');
+        for (const [name, label] of [
+          ['total-only-890.pdf', '€890 total only'],
+          ['itemized-890.pdf', '€890 itemized'],
+          ['itemized-1800.pdf', '€1,800 itemized'],
+          ['unreadable-total.pdf', 'Unreadable total']
+        ]) {
+          const link = el('a', '', label);
+          link.href = '/examples/quotes/' + name;
+          link.download = name;
+          const item = el('li');
+          item.append(link);
+          list.append(item);
+        }
+        examples.append(list);
+        card.append(examples);
+      }
+
       function drawWelcome(card) {
+        if (new URLSearchParams(location.search).get('demo') === 'DEV-003') {
+          heading(card, 'Try the €890 bumper claim', 'Fictional demo DEV-003 comes with an incident report. Upload a garage quote to see whether it answers the reviewer’s question.');
+          card.append(button('Start sample claim', 'primary', () => {
+            demoCase = 'DEV-003';
+            values = {
+              description: 'My bumper was damaged in a parking incident.',
+              incident_date: '2025-10-18', location: 'Demo car park, Munich',
+              policy_number: 'DEMO-003', email: 'driver@example.invalid', injury_status: 'no'
+            };
+            setStep(docsStep);
+          }));
+          sampleQuotes(card);
+          return;
+        }
         heading(
           card,
           'How would you like to start?',
@@ -1010,7 +1068,12 @@
         const sample = el('a', 'sample', 'Download sample accident report');
         sample.href = '/sample-accident-report.pdf';
         sample.download = 'sample-accident-report.pdf';
-        card.append(drop, actions, sample);
+        const german = el('a', 'sample', 'Download German sample report');
+        german.href = '/examples/photo-guide/accident-report-de.pdf';
+        german.download = 'accident-report-de.pdf';
+        const examples = el('div', 'sample-links');
+        examples.append(sample, german);
+        card.append(drop, actions, examples);
       }
 
       async function importPDF(file) {
@@ -1036,6 +1099,10 @@
                 'We couldn’t read the PDF. You can attach it and enter the answers yourself.'
             };
           }
+          if (importResult.document_kind === 'itemized_quote') {
+            importFile.kind = 'itemized_quote';
+            await assessQuote(importFile);
+          }
           setStep(importStep);
         } catch (error) {
           showError(error.message);
@@ -1048,9 +1115,7 @@
       function kindSelect(includeBlank) {
         const select = el('select');
         if (includeBlank) select.add(new Option('Choose document type', ''));
-        Object.entries(kinds).forEach(([key, name]) =>
-          select.add(new Option(name, key))
-        );
+        requiredKinds.forEach((key) => select.add(new Option(kinds[key], key)));
         return select;
       }
 
@@ -1068,8 +1133,27 @@
         select.value =
           importResult.document_kind in kinds ? importResult.document_kind : '';
         form.append(typeLabel, select);
+        const quotePanel = el('div');
+        form.append(quotePanel);
+        if (select.value === 'itemized_quote') showQuote(quotePanel, importFile.assessment);
+        select.addEventListener('change', async () => {
+          quotePanel.replaceChildren();
+          if (select.value !== 'itemized_quote') return;
+          if (!importFile.assessment) {
+            setBusy(true);
+            try {
+              importFile.kind = 'itemized_quote';
+              await assessQuote(importFile);
+            } finally {
+              setBusy(false);
+            }
+          }
+          showQuote(quotePanel, importFile.assessment);
+        });
         const extracted = [];
+        let translation = importResult.translation;
         for (const field of fields.filter((f) => f.type !== 'choice')) {
+          if (translation && field.key === 'description') continue;
           const options = importResult.suggestions.filter(
             (s) =>
               s.field === field.key &&
@@ -1130,11 +1214,18 @@
           extracted.push({ field, input, source: matchingSource });
           form.append(wrap);
         }
+        if (translation) {
+          const panel = el('div', 'assistance-panel');
+          panel.hidden = select.value !== 'incident_report';
+          select.addEventListener('change', () => { panel.hidden = select.value !== 'incident_report'; });
+          ClaimAssistance.translationReview(panel, translation, (updated) => { translation = updated; });
+          form.append(panel);
+        }
         const actions = el('div', 'actions');
         const use = el(
           'button',
           'btn primary',
-          extracted.length
+          extracted.length || translation
             ? 'Confirm details and continue'
             : 'Attach PDF and continue'
         );
@@ -1147,8 +1238,13 @@
           })
         );
         form.append(actions);
-        form.addEventListener('submit', (event) => {
+        form.addEventListener('submit', async (event) => {
           event.preventDefault();
+          if (select.value === 'incident_report' && translation && !translation.confirmed && !translation.use_original) {
+            showError('Confirm the English translation or choose to continue with the original German.');
+            form.querySelector('.assistance-panel')?.scrollIntoView({ block: 'nearest' });
+            return;
+          }
           const chosen = extracted.filter((item) => item.input.value.trim());
           for (const item of chosen) {
             if (item.source() || item.literal === item.input.value) continue;
@@ -1163,9 +1259,21 @@
             values[item.field.key] = item.input.value.trim();
             if (item.source()) sources[item.field.key] = item.source();
           }
-          files.push({ ...importFile, kind: select.value });
-          importResult = importFile = null;
-          setStep(nextUnanswered());
+          const doc = { ...importFile, kind: select.value };
+          if (translation && doc.kind === 'incident_report') {
+            doc.translation = translation;
+            values.description = translation.confirmed ? translation.english : translation.original;
+            sources.description = {name: doc.name, page: translation.page};
+          }
+          setBusy(true);
+          try {
+            if (doc.kind !== 'itemized_quote') delete doc.assessment;
+            files.push(doc);
+            importResult = importFile = null;
+            setStep(nextUnanswered());
+          } finally {
+            setBusy(false);
+          }
         });
         card.append(form);
       }
@@ -1185,11 +1293,11 @@
         if (/\b(cover(ed|age)?|eligib\w*|approv\w*|reimburs\w*|payout|liab\w*|pay(s|ment)?|deadline|deductible|premium|fault|compensation|liable|refund|cost|costs)\b/.test(text))
           return 'The claims team assesses coverage, payment and policy terms. You can record what happened and send your documents here.';
         if (/\b(how (big|large)|how many (files?|photos?|attachments?|documents?)|file types?|size|limit|formats?|types? of files?|too large|mb|mib|jpeg|png|heic)\b/.test(text))
-          return 'Use PDF, JPEG or PNG files up to 2 MiB each. You can attach up to three files before you submit.';
+          return 'Attach up to four files. Reports and quotes can be PDF, JPEG or PNG up to 2 MiB each. A JPEG or PNG damage photo can be up to 12 MiB.';
         if (/\b(photos?|pictures?|camera|gallery)\b/.test(text))
           return receipt
             ? 'The receipt accepts an outstanding incident report or repair quote. Damage photos can be attached before submission.'
-            : 'Attach damage photos before submitting. At Documents, choose Take a photo or Choose from gallery. Use JPEG or PNG, up to 2 MiB per photo.';
+            : 'Attach damage photos before submitting. At Documents, choose Take a photo or Choose from gallery. Choose a wide shot and a damage close-up. Each JPEG or PNG photo can be up to 12 MiB.';
         if (/\b(save|pause|resume|draft|finish later|continue later|come back|start again)\b/.test(text))
           return receipt
             ? 'Your claim has been submitted. Keep the private follow-up link on this receipt to reopen it.'
@@ -1208,6 +1316,8 @@
           return 'To import an accident report, choose Import a PDF on the opening screen. Check and correct its suggestions before continuing. You can also attach PDFs at Documents.';
         if (/\b(quotes?|estimates?|quotations?|reports?|documents?|docs?|paperwork|attach\w*|upload\w*|receipts?|evidence|pdf)\b/.test(text) || /\b(send|add) (it|them) later\b/.test(text)) {
           if (receipt) {
+            if (receipt.evidence?.next_action)
+              return receipt.evidence.next_action.message + ' To share paperwork, open Add documents to this claim, attach the file, then choose Send additional documents.';
             const missing = receipt.missing_documents.map((key) => kinds[key]);
             return missing.length
               ? 'Your receipt lists the outstanding paperwork: ' + missing.join(' and ') + '. Open Add documents to this claim, attach the file, then choose Send additional documents.'
@@ -1363,19 +1473,93 @@
         }
       }
 
+      function attachmentBody({kind, name, content_base64}) {
+        return {kind, name, content_base64};
+      }
+
+      function attachmentNotes(docs) {
+        const photos = [];
+        const translations = [];
+        docs.forEach((doc, position) => {
+          if (doc.kind === 'damage_photo' && doc.assistance)
+            photos.push({...doc.assistance, position});
+          if (doc.kind === 'incident_report' && doc.translation)
+            translations.push({...doc.translation, position});
+        });
+        return { photos, translations };
+      }
+
+      function restoreNotes(docs, notes) {
+        for (const {position, ...photo} of notes?.photos || []) {
+          if (docs[position]?.kind === 'damage_photo')
+            docs[position].assistance = photo;
+        }
+        for (const {position, ...translation} of notes?.translations || []) {
+          if (docs[position]?.kind === 'incident_report')
+            docs[position].translation = translation;
+        }
+      }
+
+      async function assessQuote(doc) {
+        try {
+          doc.assessment = await api('quote', {document: attachmentBody(doc)}, '/api/evidence/');
+        } catch {
+          doc.assessment = {status: 'received', name: doc.name,
+            reason: 'The quote was attached. Its contents could not be checked here.'};
+        }
+      }
+
+      function quoteStatus(quote) {
+        if (quote?.status === 'verified') return 'Verified';
+        if (quote?.status === 'needs_clarification') return 'Needs clarification';
+        return 'Received · awaiting verification';
+      }
+
       function checklist(card, docs) {
         const group = el('ul', 'checklist');
         group.setAttribute('aria-label', 'Document checklist');
         for (const kind of requiredKinds) {
-          const received = docs.some((doc) => doc.kind === kind);
-          const line = el('li', received ? 'present' : 'missing');
-          line.append(
-            el('strong', '', kinds[kind]),
-            el('span', '', received ? 'Included' : 'Still needed')
-          );
+          const matching = docs.filter((doc) => doc.kind === kind);
+          const latest = matching[matching.length - 1];
+          let label = latest ? 'Received' : 'Still needed';
+          if (kind === 'incident_report' && demoCase && !latest) label = 'Received in sample claim';
+          if (kind === 'itemized_quote' && latest) label = quoteStatus(latest.assessment);
+          const line = el('li', label === 'Still needed' || label === 'Needs clarification' ? 'missing' : 'present');
+          line.append(el('strong', '', kinds[kind]), el('span', '', label));
           group.append(line);
         }
         card.append(group);
+      }
+
+      function showQuote(card, quote, currentVersion = true) {
+        if (!quote) return;
+        const section = el('section', 'evidence-note');
+        section.setAttribute('aria-label', 'Quote check for ' + quote.name);
+        const version = Number.isInteger(quote.version) ? 'Version ' + quote.version + ' · ' : '';
+        section.append(el('strong', '', version + quoteStatus(quote)), el('p', '', quote.reason));
+        const citation = quote.name + (quote.page ? ' · page ' + quote.page : '');
+        section.append(el('small', 'citation', citation));
+        if (quote.status === 'verified' && typeof quote.amount_eur === 'number') {
+          const total = new Intl.NumberFormat('en-IE', {style: 'currency', currency: 'EUR'}).format(quote.amount_eur);
+          section.append(el('p', '', 'Itemized total · ' + total));
+        }
+        if (currentVersion && quote.garage_request && quote.status === 'needs_clarification') {
+          section.append(el('p', '', quote.garage_request));
+          const copy = button('Copy request for garage', 'quiet', () => copyText(quote.garage_request, copy));
+          section.append(copy);
+        }
+        card.append(section);
+      }
+
+      function showNotes(card, docs, incidentDate) {
+        for (const doc of docs) {
+          if (!doc.translation && !doc.assistance) continue;
+          const panel = el('section', 'evidence-note');
+          panel.append(el('strong', '', doc.name));
+          if (doc.assistance) ClaimAssistance.photoDetails(panel, doc, incidentDate);
+          if (doc.translation) ClaimAssistance.translationReview(panel, doc.translation);
+          card.append(panel);
+        }
       }
 
       function fileList(card, docs, allowChanges) {
@@ -1424,16 +1608,30 @@
             li.append(actions);
           }
           list.append(li);
+          if (allowChanges && doc.kind === 'itemized_quote' && doc.assessment)
+            showQuote(li, doc.assessment, !docs.slice(index + 1).some((d) => d.kind === doc.kind));
+          if (allowChanges && doc.kind === 'damage_photo') {
+            const details = el('div', 'photo-detail');
+            ClaimAssistance.photoDetails(details, doc, values.incident_date, (note) => {
+              doc.assistance = note;
+            });
+            li.append(details);
+          }
         });
         card.append(list);
       }
 
-      async function addFiles(list, kind, replaceIndex) {
+      function followupKinds() {
+        const kinds = new Set(receipt.missing_documents);
+        if (receipt.evidence) kinds.add('itemized_quote');
+        return [...kinds].filter((kind) => !files.some((doc) => doc.kind === kind));
+      }
+
+      async function addFiles(list, kind, replaceIndex, view = '') {
         try {
           if (receipt) {
             if (
-              !receipt.missing_documents.includes(kind) ||
-              files.some((doc) => doc.kind === kind) ||
+              !followupKinds().includes(kind) ||
               list.length !== 1
             ) {
               throw new Error('Choose one file for each outstanding document.');
@@ -1443,13 +1641,24 @@
             maxFiles
           ) {
             throw new Error(
-              'Choose up to 3 files for the initial claim. Remove a file before choosing another.'
+              'Choose up to 4 files for the initial claim. Remove a file before choosing another.'
             );
           }
-          list.forEach((file) => validateFile(file));
+          list.forEach((file) => validateFile(file, false, kind));
           setBusy(true);
+          status(kind === 'itemized_quote' ? 'Reading the repair estimate…' : 'Preparing the attachment…');
           const docs = await Promise.all(
-            list.map((file) => encodeFile(file, kind))
+            list.map(async (file, i) => {
+              const doc = await encodeFile(file, kind);
+              if (kind === 'itemized_quote') await assessQuote(doc);
+              if (kind === 'damage_photo') {
+                const retainedView = replaceIndex === undefined ? view : files[replaceIndex]?.assistance?.view;
+                doc.assistance = {view: i === 0 ? retainedView || '' : '',
+                  exif_date: await ClaimAssistance.photoCaptureDate(file),
+                  manual_date: '', explanation: ''};
+              }
+              return doc;
+            })
           );
           if (replaceIndex === undefined) files.push(...docs);
           else files.splice(replaceIndex, 1, ...docs);
@@ -1465,26 +1674,25 @@
       function uploadControls(card, allDocs) {
         if (!receipt && allDocs.length >= maxFiles) {
           card.append(
-            el('p', 'file-hint', 'All 3 initial attachment slots are used.')
+            el('p', 'file-hint', 'All four initial attachment slots are used.')
           );
           return;
         }
-        const outstanding = receipt
-          ? receipt.missing_documents.filter(
-              (kind) => !files.some((doc) => doc.kind === kind)
-            )
-          : [];
+        const outstanding = receipt ? followupKinds() : [];
         if (receipt && !outstanding.length) return;
         const group = el('div', 'upload-controls');
         const label = el('label', 'label', 'Paperwork type');
         label.htmlFor = 'document-kind';
         const kind = receipt ? el('select') : kindSelect(false);
         if (receipt)
-          outstanding.forEach((key) => kind.add(new Option(kinds[key], key)));
+          outstanding.forEach((key) => {
+            const revised = key === 'itemized_quote' && receipt.documents.some((d) => d.kind === key);
+            kind.add(new Option(revised ? 'Revised itemized repair quote' : kinds[key], key));
+          });
         kind.id = 'document-kind';
         kind.value = receipt
           ? outstanding[0]
-          : requiredKinds.find((k) => !allDocs.some((doc) => doc.kind === k)) ||
+          : requiredKinds.find((k) => !(demoCase && k === 'incident_report') && !allDocs.some((doc) => doc.kind === k)) ||
             requiredKinds[0];
         group.append(label, kind);
         const buttons = el('div', 'actions');
@@ -1505,13 +1713,24 @@
           return;
         }
         const photoLabel = el('p', 'label', 'Damage photos');
+        const guide = el('div');
+        ClaimAssistance.photoGuide(guide);
+        const viewLabel = el('label', 'label', 'Next photo');
+        const view = el('select');
+        view.id = 'next-photo-view';
+        viewLabel.htmlFor = view.id;
+        view.add(new Option('Wide shot', 'wide'));
+        view.add(new Option('Damage close-up', 'close_up'));
+        view.add(new Option('Other photo', ''));
+        const views = allDocs.map((doc) => doc.assistance?.view);
+        view.value = !views.includes('wide') ? 'wide' : !views.includes('close_up') ? 'close_up' : '';
         const photos = el('div', 'choices photo-actions');
         fileButton(
           photos,
           'Take a photo',
           'camera-file',
           'image/*',
-          (list) => addFiles(list, 'damage_photo'),
+          (list) => addFiles(list, 'damage_photo', undefined, view.value),
           { camera: true }
         );
         fileButton(
@@ -1519,13 +1738,12 @@
           'Choose from gallery',
           'gallery-files',
           'image/jpeg,image/png',
-          (list) => addFiles(list, 'damage_photo'),
+          (list) => addFiles(list, 'damage_photo', undefined, view.value),
           { multiple: true }
         );
         group.append(
-          photoLabel,
-          photos,
-          el('p', 'file-hint', 'PDF, JPEG or PNG · up to 2 MiB per file')
+          photoLabel, guide, viewLabel, view, photos,
+          el('p', 'file-hint', 'Reports and quotes up to 2 MiB. JPEG and PNG damage photos up to 12 MiB each.')
         );
         card.append(group);
       }
@@ -1536,6 +1754,7 @@
           'Which documents can you attach?',
           'You can submit now and use your private link to add missing paperwork later.'
         );
+        if (demoCase) sampleQuotes(card);
         checklist(card, files);
         fileList(card, files, true);
         uploadControls(card, files);
@@ -1547,6 +1766,14 @@
           )
         );
         card.append(actions);
+      }
+
+      function evidenceSource(field) {
+        const source = sources[field.key];
+        if (!source) return 'Provided by you';
+        const translation = field.key === 'description' && files.find((doc) =>
+          doc.name === source.name && doc.translation?.confirmed && doc.translation.english === values.description);
+        return (translation ? 'Confirmed English translation of ' : 'Imported from ') + sourceLabel(source);
       }
 
       function drawReview(card) {
@@ -1566,9 +1793,7 @@
               el(
                 'small',
                 'citation',
-                sources[field.key]
-                  ? 'Imported from ' + sourceLabel(sources[field.key])
-                  : 'Provided by you'
+                evidenceSource(field)
               )
             );
           list.append(item);
@@ -1582,6 +1807,9 @@
         );
         card.append(list);
         checklist(card, files);
+        const quotes = files.filter((doc) => doc.kind === 'itemized_quote');
+        quotes.forEach((doc, i) => showQuote(card, doc.assessment, i === quotes.length - 1));
+        showNotes(card, files, values.incident_date);
         const actions = el('div', 'actions');
         actions.append(button('Submit claim', 'primary', submitClaim));
         card.append(actions);
@@ -1612,9 +1840,12 @@
         sendOperation('save-draft', {
           token: privateToken(),
           expected_revision: revision,
+          evidence_version: 1,
           draft: {
+            ...(demoCase ? {demo_case: demoCase} : {}),
             values: draftValues,
-            documents: files,
+            notes: attachmentNotes(files),
+            documents: files.map(attachmentBody),
             sources: draftSources,
             step
           }
@@ -1626,7 +1857,10 @@
         sendOperation('submit', {
           token: privateToken(),
           expected_revision: revision,
-          payload: { ...values, request_id: requestId, documents: files }
+          evidence_version: 1,
+          payload: {...values, request_id: requestId,
+            ...(demoCase ? {demo_case: demoCase} : {}),
+            notes: attachmentNotes(files), documents: files.map(attachmentBody)}
         });
       }
 
@@ -1682,6 +1916,7 @@
         importResult = importFile = null;
         partialAnswer = '';
         receipt = data;
+        demoCase = data.evidence?.demo_case || null;
         step = receiptStep;
         saveNotice = false;
         editing = false;
@@ -1702,8 +1937,28 @@
           el('h3', '', 'Files received (' + receipt.document_count + ')')
         );
         fileList(card, receipt.documents, false);
+        const evidence = receipt.evidence;
+        if (evidence?.next_action) {
+          const next = el('section', 'evidence-note');
+          next.setAttribute('aria-label', 'Who acts next');
+          next.append(el('h3', '', 'Who acts next'),
+            el('strong', '', {garage: 'Garage', claimant: 'You', claims_team: 'Claims team',
+                reviewer: 'Claims reviewer'}[evidence.next_action.owner] || evidence.next_action.owner),
+            el('p', '', evidence.next_action.message));
+          if (receipt.documents.length)
+            next.append(el('p', 'file-hint', 'Already received: ' + receipt.documents.map((doc) => doc.name).join(', ') + '.'));
+          card.append(next);
+          const quotes = evidence.quotes || [];
+          quotes.forEach((quote, i) => showQuote(card, quote, i === quotes.length - 1));
+          if (demoCase === 'DEV-003') {
+            const reviewer = el('a', 'sample', 'Open reviewer evidence');
+            reviewer.href = '/reviewer/evidence?reference=' + encodeURIComponent(receipt.reference);
+            card.append(reviewer);
+            sampleQuotes(card);
+          }
+        }
         const missing = receipt.missing_documents.map((k) => kinds[k] || k);
-        card.append(
+        if (!evidence?.next_action) card.append(
           el(
             'p',
             'file-hint',
@@ -1713,7 +1968,7 @@
           )
         );
         linkPanel(card, 'Private follow-up link');
-        if (receipt.missing_documents.length) {
+        if (receipt.missing_documents.length || evidence) {
           const details = el('details', 'follow-up');
           details.open = files.length > 0;
           details.append(el('summary', '', 'Add documents to this claim'));
@@ -1724,7 +1979,8 @@
               sendOperation('add-documents', {
                 token,
                 request_id: uid(),
-                documents: files
+                ...(evidence ? {evidence_version: 1, notes: attachmentNotes(files)} : {}),
+                documents: files.map(attachmentBody)
               })
             );
             details.append(send);
@@ -1775,6 +2031,7 @@
 
       function fresh() {
         history.replaceState(null, '', location.pathname);
+        demoCase = null;
         token = '';
         requestId = '';
         revision = 0;
@@ -1790,7 +2047,7 @@
         setBusy(true);
         status('Opening private link…');
         try {
-          const data = await api('resume', { token });
+          const data = await api('resume', { token, evidence_version: 1 });
           if (data.status === 'submitted') acceptReceipt(data);
           else if (
             data.status === 'draft' &&
@@ -1802,6 +2059,9 @@
             values = { ...draft.values };
             sources = { ...draft.sources };
             files = draft.documents;
+            restoreNotes(files, draft.notes);
+            demoCase = draft.demo_case || null;
+            await Promise.all(files.filter((doc) => doc.kind === 'itemized_quote').map(assessQuote));
             step = draft.step;
             partialAnswer = '';
             if (

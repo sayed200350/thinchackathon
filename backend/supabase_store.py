@@ -46,7 +46,7 @@ class SupabaseStore:
                 and not (os.environ.get('SSL_CERT_FILE') or os.environ.get('SSL_CERT_DIR'))):
             self._tls.load_verify_locations(cafile='/etc/ssl/cert.pem')
 
-    def _request(self, resource, params=None, *, body=None):
+    def _request(self, resource, params=None, *, body=None, max_response=16 * 1024 * 1024):
         path = '/rest/v1/' + resource
         if params:
             path += '?' + urlencode(params)
@@ -60,8 +60,8 @@ class SupabaseStore:
             connection.request('GET' if body is None else 'POST', path, headers=headers,
                                body=None if body is None else json.dumps(body).encode('utf-8'))
             response = connection.getresponse()
-            raw = response.read(16 * 1024 * 1024 + 1)
-            if len(raw) > 16 * 1024 * 1024:
+            raw = response.read(max_response + 1)
+            if len(raw) > max_response:
                 raise RequestError(503, 'Supabase response exceeded the page limit.')
             data = json.loads(raw)
             if response.status not in (200, 206):

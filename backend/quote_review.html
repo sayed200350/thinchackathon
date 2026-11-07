@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Quote evidence · Policy Replay</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #182820;
+        --muted: #506057;
+        --line: #ced7cf;
+        --accent: #20563c;
+        --ground: #f5f7f3;
+        --paper: #fff;
+        --good: #e8f3e9;
+        --amber: #f7ecd5;
+        font:
+          16px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--ground);
+        color: var(--ink);
+        margin: 0;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button,
+      summary {
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.65;
+        cursor: wait;
+      }
+      a {
+        color: var(--accent);
+        text-underline-offset: 0.2em;
+      }
+      :focus-visible {
+        outline: 3px solid #297b52;
+        outline-offset: 3px;
+      }
+      header {
+        background: white;
+        border-bottom: 1px solid var(--line);
+      }
+      nav,
+      main {
+        width: min(100% - 40px, 1060px);
+        margin: auto;
+      }
+      nav {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+        min-height: 60px;
+        font-size: 0.92rem;
+      }
+      nav strong {
+        font-size: 1.15rem;
+        letter-spacing: -0.04em;
+      }
+      main {
+        padding: 36px 0 70px;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0 0 12px;
+      }
+      h1,
+      h2 {
+        font:
+          normal 2.05rem/1.13 Georgia,
+          serif;
+        letter-spacing: -0.035em;
+      }
+      h1 {
+        font-size: clamp(2.6rem, 5vw, 4rem);
+        margin-bottom: 12px;
+      }
+      h3 {
+        font-size: 1.04rem;
+      }
+      .lead,
+      .hint,
+      .cite {
+        color: var(--muted);
+      }
+      .lead {
+        max-width: 64ch;
+      }
+      .hint,
+      .cite,
+      .small {
+        font-size: 0.9rem;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.65fr) minmax(255px, 0.85fr);
+        gap: 24px;
+      }
+      .box {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        padding: clamp(16px, 3vw, 25px);
+        margin: 18px 0;
+      }
+      .section-label {
+        display: block;
+        font-weight: 650;
+        margin-bottom: 7px;
+      }
+      .route {
+        display: inline-block;
+        font-size: 0.93rem;
+        font-weight: 650;
+        padding: 4px 10px;
+        background: var(--amber);
+        border-radius: 6px;
+      }
+      .route.routine_processing {
+        background: var(--good);
+        color: #174c31;
+      }
+      .route.human_review {
+        background: #f4e5e4;
+        color: #762f26;
+      }
+      .rule {
+        display: inline-block;
+        margin-left: 9px;
+        color: var(--muted);
+        font-family: ui-monospace, monospace;
+        font-size: 0.87rem;
+      }
+      .source {
+        border-left: 3px solid #a5b6a8;
+        padding: 0 0 0 13px;
+        margin: 14px 0;
+      }
+      .source p {
+        margin: 3px 0;
+      }
+      .source ul {
+        padding-left: 19px;
+        margin: 8px 0;
+      }
+      .why {
+        margin: 10px 0;
+      }
+      button {
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: white;
+        color: var(--ink);
+        padding: 9px 13px;
+        font-weight: 600;
+        min-height: 42px;
+      }
+      button.primary {
+        background: var(--accent);
+        color: white;
+        border-color: var(--accent);
+      }
+      .btn-link {
+        background: transparent;
+        color: var(--accent);
+        border: 0;
+        text-decoration: underline;
+        padding: 4px 0;
+      }
+      summary {
+        font-weight: 630;
+        padding: 5px 0;
+      }
+      .samples {
+        padding-left: 21px;
+        margin: 8px 0;
+      }
+      .samples li {
+        padding: 4px 0;
+      }
+      input {
+        width: 100%;
+        min-height: 44px;
+        padding: 8px 10px;
+        border: 1px solid #8e9f94;
+        border-radius: 5px;
+      }
+      label {
+        display: block;
+        font-weight: 620;
+        font-size: 0.92rem;
+        margin: 12px 0 4px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      [role='alert'] {
+        color: #902e21;
+      }
+      .error:empty,
+      .feedback:empty {
+        display: none;
+      }
+      .error,
+      .feedback {
+        margin: 10px 0;
+      }
+      .source,
+      .file,
+      article,
+      .next-action {
+        overflow-wrap: anywhere;
+      }
+      .next-action {
+        background: var(--good);
+        padding: 13px;
+        border-radius: 7px;
+        margin: 12px 0;
+      }
+      .history {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin: 16px 0;
+      }
+      .history article {
+        border-top: 1px solid var(--line);
+        padding-top: 18px;
+      }
+      .history article h3 {
+        margin-bottom: 7px;
+      }
+      .file-list {
+        list-style: none;
+        padding: 0;
+      }
+      .file-list li {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 4px 16px;
+        border-bottom: 1px solid var(--line);
+        padding: 6px 0;
+      }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+      }
+      .note {
+        padding: 8px 0;
+        border-top: 1px solid var(--line);
+      }
+      .note p {
+        margin: 4px 0;
+      }
+      @media (max-width: 740px) {
+        .grid {
+          display: flex;
+          flex-direction: column;
+          gap: 0;
+        }
+        .grid aside {
+          order: 2;
+        }
+        main {
+          padding-top: 25px;
+        }
+        .box {
+          margin: 12px 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav><strong>Policy Replay</strong><a href="/reviewer">Reviewer workspace</a></nav>
+    </header>
+    <main>
+      <h1>Quote evidence</h1>
+      <details class="box" id="staff">
+        <summary>Open submitted claim</summary>
+        <form id="lookup" autocomplete="off">
+          <label for="reference">Claim reference</label><input id="reference" required maxlength="90" />
+          <label for="key">Reviewer key</label
+          ><input id="key" type="password" required maxlength="600" autocomplete="off" />
+          <div class="bar" style="margin-top: 14px">
+            <button class="primary" type="submit">Open claim</button
+            ><button id="close-case" type="button" hidden>Close claim</button>
+          </div>
+        </form>
+        <p id="private-error" class="error" role="alert"></p>
+        <div id="private-case"></div>
+      </details>
+
+      <section id="demo">
+        <p class="lead">
+          Replay fictional claim DEV-003 with a new garage estimate. Each upload keeps its original file
+          and shows the facts behind the recommendation for this session.
+        </p>
+        <div class="grid">
+          <div>
+            <section class="box" aria-labelledby="uploads">
+              <h2 id="uploads">Check a garage quote</h2>
+              <p class="hint">
+                Upload a PDF of up to 2 MiB. Only the quote facts change in this example.
+              </p>
+              <input id="upload" type="file" accept="application/pdf,.pdf" hidden />
+              <button id="choose" type="button" class="primary">Upload garage quote</button>
+              <p class="feedback" id="progress" role="status" aria-live="polite"></p>
+              <p class="error" id="upload-error" role="alert"></p>
+              <div id="versions" class="history"></div>
+            </section>
+          </div>
+          <aside>
+            <section class="box">
+              <h2>Original recommendation</h2>
+              <div id="baseline" aria-live="polite">Loading DEV-003…</div>
+            </section>
+            <section class="box">
+              <h2>Example estimates</h2>
+              <p><a href="/chat?demo=DEV-003">File DEV-003 as the claimant</a></p>
+              <ul class="samples">
+                <li><a href="/examples/quotes/total-only-890.pdf" download>total-only-890.pdf</a></li>
+                <li><a href="/examples/quotes/itemized-890.pdf" download>itemized-890.pdf</a></li>
+                <li><a href="/examples/quotes/itemized-1800.pdf" download>itemized-1800.pdf</a></li>
+                <li>
+                  <a href="/examples/quotes/unreadable-total.pdf" download>unreadable-total.pdf</a>
+                </li>
+              </ul>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+    <script>
+      'use strict';
+      const byId = (id) => document.getElementById(id);
+      const routes = {
+        request_information: 'Request information',
+        routine_processing: 'Routine processing',
+        human_review: 'Human review'
+      };
+      const currency = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' });
+      const amount = (value) => (value == null ? 'Unverified' : currency.format(value));
+      const breakdown = (value) =>
+        value == null ? 'Unverified' : value ? 'Itemized' : 'Breakdown missing';
+      const make = (tag, text, cls) => {
+        const element = document.createElement(tag);
+        if (text != null) element.textContent = text;
+        if (cls) element.className = cls;
+        return element;
+      };
+      async function api(path, data) {
+        const response = await fetch(
+          path,
+          data === undefined
+            ? { cache: 'no-store' }
+            : {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+                cache: 'no-store'
+              }
+        );
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'The request could not be completed.');
+        return body;
+      }
+      function readFile(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.onerror = () => reject(new Error('The PDF could not be opened. Select it again.'));
+          reader.readAsDataURL(file);
+        });
+      }
+      function decisionCard(target, decision) {
+        target.append(
+          make(
+            'span',
+            routes[decision.recommendation] || decision.recommendation,
+            'route ' + decision.recommendation
+          ),
+          make('span', decision.matched_rule + ' · ' + decision.policy_version, 'rule'),
+          make('p', decision.explanation, 'why')
+        );
+      }
+      function evidenceCard(assessment, version, decision, previous, downloadURL) {
+        const item = make('article');
+        item.setAttribute('aria-label', 'Quote version ' + version);
+        item.append(make('h3', 'Version ' + version + ' · ' + assessment.name));
+        if (decision) decisionCard(item, decision);
+        if (previous) {
+          item.append(
+            make(
+              'p',
+              'Previous amount: ' +
+                amount(previous.amount_eur) +
+                ' · ' +
+                breakdown(previous.itemized) +
+                '. Current amount: ' +
+                amount(assessment.amount_eur) +
+                ' · ' +
+                breakdown(assessment.itemized) +
+                '.',
+              'small'
+            )
+          );
+        }
+        const source = make('div', null, 'source');
+        source.append(
+          make(
+            'p',
+            assessment.status === 'verified' ? 'Verified' : 'Needs clarification',
+            'section-label'
+          ),
+          make('p', assessment.reason)
+        );
+        if (assessment.total_text) {
+          source.append(
+            make(
+              'p',
+              assessment.name + ' · page ' + assessment.page + ' · ' + assessment.total_text,
+              'cite'
+            )
+          );
+        }
+        if (assessment.lines?.length) {
+          const list = make('ul');
+          for (const line of assessment.lines) {
+            list.append(
+              make('li', line.description + ' · ' + amount(line.amount_eur) + ' · page ' + line.page)
+            );
+          }
+          source.append(list);
+        }
+        item.append(source);
+        if (downloadURL) {
+          const link = make('a', 'Download original');
+          link.download = assessment.name;
+          link.href = downloadURL;
+          item.append(link);
+        }
+        return item;
+      }
+      let lastQuote = null,
+        originalQuote = null,
+        count = 0;
+      function baseline(decision) {
+        byId('baseline').replaceChildren();
+        decisionCard(byId('baseline'), decision);
+      }
+      api('/api/claims/DEV-003')
+        .then((data) => {
+          originalQuote = {
+            amount_eur: data.claim.quote_eur,
+            itemized: data.decision.supporting_facts.itemized_quote_present
+          };
+          baseline(data.decision);
+        })
+        .catch(
+          () => (byId('baseline').textContent = 'Upload a quote to load the original v1 recommendation.')
+        );
+      byId('choose').addEventListener('click', () => byId('upload').click());
+      byId('upload').addEventListener('change', async (event) => {
+        const file = event.target.files[0];
+        event.target.value = '';
+        if (!file) return;
+        const error = byId('upload-error'),
+          progress = byId('progress'),
+          choose = byId('choose');
+        error.textContent = '';
+        progress.textContent = 'Checking the quote…';
+        choose.disabled = true;
+        try {
+          if (!file.size || file.size > 2 * 1024 * 1024 || !/\.pdf$/i.test(file.name))
+            throw new Error('Choose a PDF up to 2 MiB.');
+          const data = await api('/api/evidence/replay', {
+            document: { name: file.name, kind: 'itemized_quote', content_base64: await readFile(file) }
+          });
+          baseline(data.original);
+          const item = evidenceCard(
+            data.assessment,
+            ++count,
+            data.decision,
+            lastQuote || originalQuote,
+            URL.createObjectURL(file)
+          );
+          byId('versions').prepend(item);
+          lastQuote = data.assessment;
+          progress.textContent = 'Quote version ' + count + ' checked.';
+        } catch (err) {
+          error.textContent = err.message;
+          progress.textContent = '';
+        } finally {
+          choose.disabled = false;
+        }
+      });
+
+      let lookupGeneration = 0,
+        staffKey = '',
+        staffReference = '';
+      function closeCase() {
+        lookupGeneration++;
+        staffKey = staffReference = '';
+        byId('lookup').reset();
+        byId('private-case').replaceChildren();
+        byId('private-error').textContent = '';
+        byId('close-case').hidden = true;
+        byId('demo').hidden = false;
+      }
+      byId('close-case').addEventListener('click', closeCase);
+      byId('staff').addEventListener('toggle', () => {
+        if (!byId('staff').open) closeCase();
+      });
+      const linkedReference = new URLSearchParams(location.search).get('reference');
+      if (/^CLM-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(linkedReference)) {
+        byId('reference').value = 'CLM-' + linkedReference.slice(4).toLowerCase();
+        byId('staff').open = true;
+      }
+      window.addEventListener('pagehide', closeCase);
+      async function downloadDocument(position) {
+        const generation = lookupGeneration;
+        try {
+          const doc = await api('/api/evidence/document', {
+            reference: staffReference,
+            reviewer_key: staffKey,
+            position
+          });
+          if (generation !== lookupGeneration) return;
+          const bytes = Uint8Array.from(atob(doc.content_base64), (ch) => ch.charCodeAt(0));
+          const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+          const link = make('a', 'Download');
+          link.href = url;
+          link.download = doc.name;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (err) {
+          if (generation === lookupGeneration) byId('private-error').textContent = err.message;
+        }
+      }
+      function renderPrivate(data) {
+        const panel = byId('private-case'),
+          evidence = data.evidence;
+        panel.append(make('h2', 'Claim ' + data.reference));
+        if (evidence.decision) decisionCard(panel, evidence.decision);
+        if (evidence.next_action) {
+          const next = make('div', null, 'next-action');
+          next.append(
+            make('strong', evidence.next_action.owner),
+            make('p', evidence.next_action.message)
+          );
+          panel.append(next);
+        }
+        panel.append(make('h3', 'Original documents'));
+        const files = make('ul', null, 'file-list');
+        data.documents.forEach((doc, i) => {
+          const row = make('li'),
+            button = make('button', 'Download', 'btn-link');
+          button.type = 'button';
+          button.setAttribute('aria-label', 'Download ' + doc.name);
+          button.addEventListener('click', () => downloadDocument(doc.position ?? i));
+          row.append(make('span', doc.name, 'file'), button);
+          files.append(row);
+        });
+        panel.append(files);
+        const history = evidence.history || [],
+          quotes = evidence.quotes || [];
+        if (history.length) {
+          panel.append(make('h3', 'Recommendation history'));
+          const list = make('ol');
+          for (const event of history) {
+            const d = event.decision;
+            list.append(
+              make(
+                'li',
+                (event.quote_version ? 'Quote ' + event.quote_version + ' · ' : '') +
+                  (routes[d.recommendation] || d.recommendation) +
+                  ' · ' +
+                  d.matched_rule +
+                  ' · ' +
+                  d.explanation
+              )
+            );
+          }
+          panel.append(list);
+        }
+        if (quotes.length) {
+          panel.append(make('h3', 'Quote versions'));
+          const versions = make('div', null, 'history');
+          quotes.forEach((quote, i) => {
+            const event = history.find((entry) => entry.quote_version === quote.version);
+            const card = evidenceCard(quote, quote.version, event?.decision, quotes[i - 1], null);
+            const original = make('button', 'Download original', 'btn-link');
+            original.type = 'button';
+            original.addEventListener('click', () => downloadDocument(quote.position));
+            card.append(original);
+            versions.prepend(card);
+          });
+          panel.append(versions);
+        }
+        if (evidence.notes?.photos?.length) {
+          panel.append(make('h3', 'Photo dates'));
+          for (const photo of evidence.notes.photos) {
+            const note = make('div', null, 'note');
+            const fileName = data.documents[photo.position]?.name || 'Photo';
+            const view = { wide: 'Wide shot', close_up: 'Close-up' }[photo.view];
+            note.append(
+              make('strong', view ? fileName + ' · ' + view : fileName),
+              make('p', 'Incident date: ' + (data.incident_date || 'Unknown')),
+              make('p', 'Capture date in file: ' + (photo.exif_date || 'Unknown')),
+              make('p', 'Date given by claimant: ' + (photo.manual_date || 'Unknown')),
+              make('p', photo.explanation || 'No explanation supplied.')
+            );
+            panel.append(note);
+          }
+        }
+        if (evidence.notes?.translations?.length) {
+          panel.append(make('h3', 'Report translations'));
+          for (const translation of evidence.notes.translations) {
+            const note = make('div', null, 'note');
+            const fileName = data.documents[translation.position]?.name || 'Report';
+            note.append(
+              make('strong', fileName + ' · page ' + translation.page),
+              make('p', translation.original),
+              make('p', translation.english || 'English wording unavailable.'),
+              make(
+                'p',
+                translation.use_original
+                  ? 'Claimant chose the original wording'
+                  : translation.confirmed
+                    ? 'Confirmed by claimant'
+                    : 'Awaiting confirmation',
+                'cite'
+              )
+            );
+            panel.append(note);
+          }
+        }
+      }
+      byId('lookup').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const generation = ++lookupGeneration;
+        const reference = byId('reference').value.trim(),
+          key = byId('key').value;
+        byId('private-case').replaceChildren();
+        byId('private-error').textContent = '';
+        staffKey = staffReference = '';
+        byId('close-case').hidden = true;
+        byId('demo').hidden = false;
+        try {
+          const result = await api('/api/evidence/reviewer', { reference, reviewer_key: key });
+          if (generation !== lookupGeneration) return;
+          staffKey = key;
+          staffReference = reference;
+          renderPrivate(result);
+          byId('key').value = '';
+          byId('close-case').hidden = false;
+          byId('demo').hidden = true;
+        } catch (err) {
+          if (generation === lookupGeneration) byId('private-error').textContent = err.message;
+        }
+      });
+    </script>
+  </body>
+</html>

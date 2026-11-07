@@ -1,7 +1,8 @@
 # Status A
-- Fertig: v1-Engine, CSV-Vorabexport, Qualitätsreport, lokaler Reviewer-Chat mit Szenarien und Korrekturen, gehostete Supabase-Datenbank.
-- Supabase: 26 Claims, 26 v1-Entscheidungen, 14/14 Labels korrekt, 24 offen und 2 geschlossen.
-- Verifiziert: Reviewer-API und Chat lesen das gemeinsame Supabase-Projekt. RPC und Lovable-Insert teilen eine Revisionsfolge; Live-Test samt Testfall zurückgerollt.
-- Übergabe an Rafik: /chat bietet PDF-Import, Beleg-Checkliste, Entwurfslink und Nachreichen. Rückfragen wie „Can I send the quote later?“ werden im selben Schritt beantwortet. Demo-PDF unter /sample-accident-report.pdf. API in contract/api.md.
-- Als Nächstes: offizielle v2-Änderung integrieren, unabhängig prüfen und veröffentlichen.
-- Blocker: v2-Regel steht aus. Letzte Änderung an contract/: Schadenaufnahme und private Dateien (2026-11-07).
+
+- **Fertig** · v1-Engine, CSV-Export, Qualitätsreport, Reviewer-Chat und Schadenaufnahme mit Belegprüfung. Die ursprüngliche Supabase-Umgebung enthält 26 fiktive Fälle, 26 v1-Entscheidungen und 14/14 korrekte Entwicklungslabels. 24 Fälle sind offen, zwei geschlossen.
+- **Demo für Rafik** · In `/chat?demo=DEV-003` den fiktiven Fall starten. Erst den €890-Beleg ohne Aufschlüsselung einreichen und die Werkstattanfrage kopieren. Über denselben privaten Link den aufgeschlüsselten €890-Beleg nachreichen. In `/reviewer/evidence` mit Referenz und Prüfschlüssel beide Originale und den Wechsel von v1.2 auf v1.3 zeigen. Die Jury kann €1.800 (v1.1) oder einen unlesbaren Betrag (v1.missing) wählen. [Ablauf und Beispieldateien](../../README.md#demo-the-890-bumper-claim)
+- **Weitere Aufnahmewege** · Vier Startdateien, Originalfotos bis 12 MiB mit Datumsabgleich und deutschsprachige Berichte mit bestätigter Übersetzung oder Originaltext. Nach dem Einreichen sieht der Antragsteller Quittung, Dateinamen und Zuständigkeit. Begründungen und Originaldateien sind über den Prüferzugang abrufbar.
+- **Verifiziert** · Alle acht neuen Browserfälle und vier bestehende Hilfedialog-Tests bestanden mit lokaler SQLite-Datenbank. [API-Vertrag für Lovable](../../contract/api.md)
+- **Übergabe für Supabase** · Die Belegmigration ist in Thinc installiert. Die Live-Prüfung unter der Browserrolle bestätigte Zugriffsschutz, Wiederholbarkeit, Fassungen und beide Originaldateien. Alle Testdaten wurden zurückgerollt. Der API-Server benötigt das passende Dienstgeheimnis. [Migration und Zugriff](../../contract/db/README.md#install-private-evidence-storage)
+- **Offen** · Offizielle v2-Änderung einarbeiten und mit Rafiks unabhängigen Erwartungen prüfen.

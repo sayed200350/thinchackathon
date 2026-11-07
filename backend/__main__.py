@@ -15,6 +15,10 @@ from .chat import answer
 from .intake import initialize_intakes, validate_intake
 from .intake_links import append_documents, initialize_intake_links, resolve_link, save_draft, submit_linked
 from .intake_pdf import extract_pdf
+from .quote_evidence import assess_quote, demo_replay, QUOTE_EXAMPLES
+from .evidence_cases import claimant_action, staff_action
+from . import evidence_storage
+from .evidence_setup import credential
 from .store import RequestError, connect, initialize
 
 
@@ -22,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCES = [ROOT / "data/taktile" / name for name in
                    ("labelled_development_cases.csv", "unlabelled_practice_cases.csv")]
 SERVER_SETTINGS = {"JEV_API_KEY", "JEV_MODEL", "OPENAI_API_KEY", "OPENAI_MODEL",
-                   "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY"}
+                   "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY", "CLAIM_REVIEWER_KEY", "CLAIM_EVIDENCE_SERVICE_KEY"}
 INTAKE_REQUEST_LIMIT = 9 * 1024 * 1024  # Three 2 MiB files after base64 encoding, plus form fields.
 
 
@@ -55,11 +59,12 @@ def open_store_factory(mode, database, sources):
     initialize(path, sources or DEFAULT_SOURCES)
     initialize_intakes(path)
     initialize_intake_links(path)
+    evidence_storage.initialize(path)
     return "SQLite", lambda: closing(connect(path))
 
 
 class Handler(BaseHTTPRequestHandler):
-    def reply(self, status, payload=None, media_type=None):
+    def reply(self, status, payload=None, media_type=None, filename=None):
         if isinstance(payload, bytes):
             data = payload
             media_type = media_type or "text/html; charset=utf-8"
@@ -74,8 +79,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Vary", "Origin")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Type", media_type)
-        if media_type == "application/pdf":
-            self.send_header("Content-Disposition", 'attachment; filename="sample-accident-report.pdf"')
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -104,15 +109,28 @@ class Handler(BaseHTTPRequestHandler):
             return 200, self.server.reviewer_page
         if self.command == "POST" and parts == ["api", "intakes", "import-pdf"]:
             return 200, extract_pdf(self.read_json(3 * 1024 * 1024))
+        if self.command == "POST" and parts[:2] == ["api", "evidence"] and len(parts)==3:
+            action = parts[2]
+            body = self.read_json(3*1024*1024 if action in ("quote","replay") else 65536)
+            if not isinstance(body, dict):
+                raise RequestError(400, "Send a JSON object.")
+            if action in ("quote","replay"):
+                return 200, (assess_quote if action=="quote" else demo_replay)(body.get("document"))
+            if action in ("reviewer","document"):
+                with self.server.open_store() as store:
+                    return 200, staff_action(store,action,body,self.server.staff_key)
+            raise RequestError(404, "Unknown evidence operation.")
         with self.server.open_store() as store:
             if self.command == "POST" and len(parts) == 3 and parts[:2] == ["api", "intakes"]:
                 action = parts[2]
                 if action not in ("save-draft", "resume", "submit", "add-documents"):
                     raise RequestError(404, "Unknown intake endpoint.")
-                limit = 65536 if action == "resume" else INTAKE_REQUEST_LIMIT
+                limit = 65536 if action == "resume" else 66*1024*1024
                 body = self.read_json(limit)
                 if not isinstance(body, dict):
                     raise RequestError(400, "Send a JSON object.")
+                if body.get("evidence_version") == 1:
+                    return 200, claimant_action(store,action,body)
                 token = body.get("token")
                 if action == "resume":
                     return 200, resolve_link(store, token)
@@ -149,8 +167,22 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(status, result)
 
     def do_GET(self):
-        if urlsplit(self.path).path == "/sample-accident-report.pdf":
-            self.reply(200, self.server.sample_pdf, "application/pdf")
+        path = urlsplit(self.path).path
+        if path == "/reviewer/evidence":
+            self.reply(200,(ROOT/"backend/quote_review.html").read_bytes())
+            return
+        if path == "/assets/claim_assistance.js":
+            self.reply(200,(ROOT/"backend/claim_assistance.js").read_bytes(),"application/javascript; charset=utf-8")
+            return
+        for group, names in (("quotes",QUOTE_EXAMPLES),("photo-guide",("wide.jpg","close-up.jpg","accident-report-de.pdf"))):
+            name = path.rsplit("/",1)[-1]
+            if path == f"/examples/{group}/{name}" and name in names:
+                pdf = name.endswith(".pdf")
+                self.reply(200,(ROOT/"backend/fixtures"/group/name).read_bytes(),
+                           "application/pdf" if pdf else "image/jpeg", name if pdf else None)
+                return
+        if path == "/sample-accident-report.pdf":
+            self.reply(200, self.server.sample_pdf, "application/pdf", "sample-accident-report.pdf")
             return
         self.handle_api()
 
@@ -174,6 +206,10 @@ def main():
         load_settings(args.env_file)
         storage, open_store = open_store_factory(args.store, args.db, args.claims)
         with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as server:
+            state_dir = args.db.parent/'.evidence-keys' if args.db else args.env_file.resolve().parent/'backend/.local'
+            server.staff_key = credential(state_dir,'CLAIM_REVIEWER_KEY')
+            if storage == 'Supabase':
+                os.environ['CLAIM_EVIDENCE_SERVICE_KEY'] = credential(state_dir, 'CLAIM_EVIDENCE_SERVICE_KEY')
             server.open_store = open_store
             server.intake_page = Path(__file__).with_name("intake.html").read_bytes()
             server.sample_pdf = (ROOT / "backend/fixtures/sample-accident-report.pdf").read_bytes()
