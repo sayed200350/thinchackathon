@@ -10,10 +10,31 @@ The local service listens at `http://127.0.0.1:8765`. Use your frontend’s actu
 
 | Method and path | Response |
 | --- | --- |
+| `GET /chat` | Browser chat for the local demo. Also served at `/`. |
+| `POST /api/chat` | One read-only conversation turn. Returns the selected claim, answer, evidence, suggested follow-ups and the providers actually used. |
 | `GET /api/claims` | `{"claims":[...]}`. Rows have `case_id`, `case_status`, the original `recommendation`, the current `effective_recommendation`, and integer `revision`. |
 | `GET /api/claims/{case_id}` | `claim` (source CSV fields, excluding development labels), `decision` (immutable [engine result](example-result-DEV-001.json)), `effective_recommendation`, `revision`, and `history` (oldest first). |
 | `POST /api/claims/{case_id}/corrections` | Append a correction. Returns the updated detail object, HTTP 201 on creation and 200 on an identical retry. |
 | `GET /api/policy-preview` | Until the official update, returns `status: "awaiting_v2"`, `from_version: "v1"`, `to_version: "v2"`, open/closed claim counts, and `changes: null`. |
+
+## Connect the Lovable chat
+
+Send the latest question and copy the last response’s `case_id` into the next request. A new claim ID in the question switches the conversation to that claim. Include recent completed turns as `{"role":"user"|"assistant","content":"..."}`. The service accepts a maximum of 16 history entries and 2,000 characters in the new message.
+
+```sh
+curl -sS http://127.0.0.1:8765/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Why does DEV-002 need more information?","case_id":null,"history":[]}'
+curl -sS http://127.0.0.1:8765/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"What if we received the incident report?","case_id":"DEV-002"}'
+```
+
+Render `answer` and each `evidence` entry (`label`, `value`) as text. Each suggestion is another question the user can send. If present, `action.type = "review_correction"` supplies `case_id`, `policy_version`, `revision` and `current_recommendation` for the confirmation form below. Sending a chat message never appends a correction.
+
+`model_usage.intent` reports `Jev` or `local`. `model_usage.answer` reports `GPT` when it selects supporting statements and `policy engine` for local responses. Jev receives the question, recent conversation text and the available intents. GPT receives the question, recent conversation text and the verified candidate statements on explanatory turns. The model keys belong on the server. The engine reads recorded claim facts and computes every scenario result locally.
+
+The local chat and its correction form share SQLite. A published Lovable app needs a hosted chat endpoint reading the same claim and correction store as the rest of that app. The hosted Supabase project already contains the demo claims. Its publishable key alone cannot run this Python endpoint.
 
 ## Save and verify a reviewer correction
 

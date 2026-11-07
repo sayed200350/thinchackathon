@@ -2,7 +2,19 @@
 
 Taktile track · thinc! hack MUC · 7–8 November 2026
 
-Policy Replay will help a motor-insurance reviewer answer one question when a policy changes: **Which open claims need a second look, and why?** The weekend deliverable is a CSV decision engine and a reviewer app that explains the same decisions.
+Policy Replay is a chatbot for motor-insurance reviewers. Ask why a claim took its route, test a different fact, or record a human correction. The same engine produces the judges’ batch CSV. The official v2 policy will determine which open claims need a second look.
+
+## Try the reviewer chatbot
+
+Run `python3 -m backend` from the repository root with Python 3.9+ and open the [local chat](http://127.0.0.1:8765/chat).
+
+1. Ask **“Why does DEV-002 need more information?”** The decision identifies the missing incident report under v1.2.
+2. Ask **“What if we received the incident report?”** The simulator changes that one fact and returns routine processing under v1.3. Expand the evidence to read the policy clause.
+3. Ask **“Show the recorded decision.”** The original still requests the incident report. **“Correct this decision”** opens a separate form where a reviewer can record a new route and reason.
+
+For a live boundary test, ask about DEV-001, then try a €1,500 quote and a €1,501 quote. Only the second amount triggers human review.
+
+The demo works without model credentials. To enable the integrations, set `JEV_API_KEY` and/or `OPENAI_API_KEY` in the server’s local `.env` and restart. Jev classifies the question. GPT selects which verified statements to include in a claim explanation. The evidence panel identifies the source used for each answer. The browser calls the [chat API](contract/api.md).
 
 ## Hosted database for Lovable
 
@@ -49,7 +61,7 @@ case_id,recommendation_v1,recommendation_v2,needs_recheck,rule_v1,rule_v2,explan
 
 ## Five-minute demo
 
-1. **0:00–1:00 · Rafik** opens one easy claim and one incomplete claim. Point to the fact and policy clause that explain each route.
+1. **0:00–1:00 · Rafik** asks the chat why DEV-002 needs more information. Supply the missing incident report in a hypothetical, expand its clause and show the original decision.
 2. **1:00–2:30 · Rafik and Sayed** preview the official policy change. Rafik opens an affected claim. Sayed explains why its route changed and shows a closed claim that retained its decision.
 3. **2:30–3:30 · Judge** corrects a recommendation and enters a reason. Refresh the page and show the audit history.
 4. **3:30–5:00 · Sayed and Rafik** show before-and-after quality, including changed cases. Rafik adjusts one cost assumption and closes on the effect on payback. Name the next test before rollout.
