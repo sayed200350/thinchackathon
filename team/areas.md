@@ -14,7 +14,7 @@ Jede Datei hat genau einen Besitzer. Nur der Besitzer schreibt.
 - `team/status/B.md`, `team/tasks/B-*.md`, `team/inbox/B/done/`
 - Nicht mehr B: Speichern von Reviewer-Korrekturen und Audit-Historie (jetzt C). `app/` ist nur Frontend und spricht die API aus `contract/api.md`.
 
-## C — Backend
+## C — Mo · Backend
 - `backend/` — API-Server (Claims, Entscheidungen, Policy-Change-Preview), Speicherung von Reviewer-Korrekturen und Audit-Historie, Engine-Anbindung (ruft `engine/` von A als Bibliothek bzw. Batch-Command auf)
 - `backend/db/` — Datenbank, Schema, Migrationen
 - `backend/tests/` — Backend-Tests
