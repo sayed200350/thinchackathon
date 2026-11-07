@@ -155,3 +155,7 @@ class SQLiteSession(sqlite3.Connection):
     case_detail = case_detail
     save_correction = save_correction
     preview = preview
+
+    def save_intake(self, payload):
+        from .intake import save_intake_sqlite
+        return save_intake_sqlite(self, payload)

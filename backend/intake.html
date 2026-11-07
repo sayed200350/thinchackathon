@@ -1,0 +1,1002 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f8f5" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Report a motor claim · Policy Replay</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #172923;
+        --muted: #54635c;
+        --line: #ced7cf;
+        --paper: #fff;
+        --ground: #f7f8f5;
+        --accent: #215539;
+        --pale: #e6f0e7;
+        --error: #922f1e;
+        font:
+          16px/1.5 'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--ground);
+        margin: 0;
+        color: var(--ink);
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.56;
+        cursor: wait;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #26754a;
+        outline-offset: 3px;
+      }
+      .top {
+        background: var(--paper);
+        border-bottom: 1px solid var(--line);
+      }
+      .bar {
+        max-width: 1180px;
+        min-height: 70px;
+        margin: auto;
+        padding: 0 clamp(20px, 5vw, 72px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      .wordmark {
+        font-weight: 740;
+        font-size: 20px;
+        letter-spacing: -0.055em;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+      .mark {
+        width: 21px;
+        height: 22px;
+        display: inline-block;
+        background:
+          linear-gradient(
+            90deg,
+            transparent 0 25%,
+            var(--accent) 25% 46%,
+            transparent 46%
+          ),
+          linear-gradient(var(--accent), var(--accent)) top right/75% 4px
+            no-repeat,
+          linear-gradient(var(--accent), var(--accent)) 80% 47%/63% 4px
+            no-repeat,
+          linear-gradient(var(--accent), var(--accent)) bottom left/85% 4px
+            no-repeat;
+        transform: skewY(-8deg);
+      }
+      .product {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .layout {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: clamp(30px, 6vw, 74px) clamp(20px, 5vw, 72px) 70px;
+        display: grid;
+        grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
+        gap: clamp(34px, 7vw, 105px);
+        align-items: start;
+      }
+      .side {
+        position: sticky;
+        top: 32px;
+      }
+      h1 {
+        font:
+          normal clamp(37px, 4vw, 58px) / 1.02 Georgia,
+          'Times New Roman',
+          serif;
+        letter-spacing: -0.055em;
+        margin: 0 0 18px;
+        max-width: 7em;
+      }
+      .sub {
+        margin: 0;
+        color: var(--muted);
+        max-width: 29ch;
+      }
+      .stages {
+        list-style: none;
+        padding: 0;
+        margin: 38px 0 0;
+        display: grid;
+        gap: 14px;
+      }
+      .stage {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .stage[aria-current='step'] {
+        color: var(--ink);
+        font-weight: 650;
+      }
+      .dot {
+        border: 1px solid #a1b1a5;
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        display: block;
+      }
+      .stage.active .dot {
+        background: var(--accent);
+        border-color: var(--accent);
+        outline: 1px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .stage.done .dot {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .chat {
+        min-width: 0;
+      }
+      .log {
+        display: grid;
+        gap: 16px;
+      }
+      .past {
+        margin: 0;
+        padding: 0 0 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .past small {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .past p {
+        margin: 5px 0 0;
+        font-size: 16px;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+      }
+      .card {
+        border: 1px solid var(--line);
+        background: var(--paper);
+        border-radius: 16px;
+        padding: clamp(20px, 3vw, 34px);
+        scroll-margin: 20px;
+      }
+      .log:not(:empty) {
+        margin-bottom: 24px;
+      }
+      h2 {
+        font:
+          normal clamp(26px, 3.1vw, 39px) / 1.12 Georgia,
+          'Times New Roman',
+          serif;
+        letter-spacing: -0.04em;
+        margin: 0 0 12px;
+      }
+      .help {
+        color: var(--muted);
+        margin: 0 0 22px;
+      }
+      form {
+        margin: 0;
+      }
+      .label {
+        display: block;
+        margin: 14px 0 6px;
+        font-size: 14px;
+        font-weight: 650;
+      }
+      input,
+      textarea,
+      select {
+        color: var(--ink);
+        background: #fff;
+        border: 1px solid #94a79a;
+        border-radius: 7px;
+        max-width: 100%;
+        min-height: 46px;
+        padding: 10px 12px;
+        width: 100%;
+      }
+      textarea {
+        resize: vertical;
+        min-height: 104px;
+      }
+      input[type='file'] {
+        padding: 7px;
+      }
+      input::file-selector-button {
+        border: 1px solid var(--line);
+        background: var(--ground);
+        color: var(--ink);
+        font: inherit;
+        border-radius: 4px;
+        padding: 5px 9px;
+        margin-right: 10px;
+        cursor: pointer;
+      }
+      .actions,
+      .choices {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 18px;
+      }
+      .btn {
+        border: 1px solid var(--line);
+        padding: 10px 16px;
+        border-radius: 7px;
+        min-height: 44px;
+        background: var(--paper);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .btn:hover:not(:disabled) {
+        border-color: var(--accent);
+        background: var(--pale);
+      }
+      .btn.primary {
+        background: var(--accent);
+        color: white;
+        border-color: var(--accent);
+      }
+      .btn.primary:hover:not(:disabled) {
+        background: #153f29;
+      }
+      .btn.quiet {
+        border: 0;
+        background: transparent;
+        padding: 5px 8px;
+        font-size: 14px;
+        font-weight: 550;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        min-height: 40px;
+      }
+      .files,
+      .review {
+        margin: 18px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .file,
+      .field {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        border-top: 1px solid var(--line);
+        padding: 11px 0;
+      }
+      .field div,
+      .file div {
+        min-width: 0;
+      }
+      .field dt,
+      .file small {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .field dd,
+      .file span {
+        margin: 3px 0 0;
+        display: block;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+      }
+      .file .quiet,
+      .field .quiet {
+        flex: none;
+      }
+      .docs-area {
+        display: grid;
+        gap: 8px;
+      }
+      .error {
+        color: var(--error);
+        font-size: 14px;
+        margin: 12px 0 0;
+      }
+      .reference {
+        font:
+          600 clamp(17px, 3vw, 25px) / 1.4 ui-monospace,
+          monospace;
+        overflow-wrap: anywhere;
+        letter-spacing: 0.025em;
+        margin: 4px 0 16px;
+      }
+      .sr {
+        position: absolute;
+        clip-path: inset(50%);
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .review h3 {
+        font-size: 17px;
+        margin: 18px 0 4px;
+      }
+      @media (max-width: 720px) {
+        .bar {
+          min-height: 56px;
+        }
+        .layout {
+          display: block;
+          padding-top: 25px;
+        }
+        .side {
+          position: static;
+          margin: 0 0 22px;
+        }
+        h1 {
+          font-size: 37px;
+          margin: 0 0 8px;
+          max-width: none;
+        }
+        .sub {
+          max-width: none;
+          font-size: 15px;
+        }
+        .stages {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px 14px;
+          margin: 17px 0 0;
+        }
+        .stage {
+          font-size: 12px;
+          gap: 7px;
+        }
+        .dot {
+          width: 7px;
+          height: 7px;
+        }
+        .stage.active .dot {
+          outline-offset: 1px;
+        }
+        .card {
+          border-radius: 12px;
+        }
+        .log {
+          gap: 10px;
+        }
+        .past {
+          padding-bottom: 10px;
+        }
+        .field,
+        .file {
+          align-items: flex-start;
+        }
+        .btn {
+          min-height: 44px;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .card {
+          animation: appear 0.18s ease-out;
+        }
+        @keyframes appear {
+          from {
+            opacity: 0.65;
+            transform: translateY(3px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="bar">
+        <span class="wordmark"
+          ><span class="mark" aria-hidden="true"></span>Policy Replay</span
+        ><span class="product">Motor claims</span>
+      </div>
+    </header>
+    <main class="layout">
+      <aside class="side">
+        <h1>Report a motor claim</h1>
+        <p class="sub">
+          Tell us what happened and attach the documents you have.
+        </p>
+        <ol class="stages" id="stages" aria-label="Claim progress"></ol>
+      </aside>
+      <section class="chat" aria-label="Claim intake conversation">
+        <div class="log" id="history" aria-label="Your answers"></div>
+        <div id="current"></div>
+        <p id="announce" class="sr" role="status"></p>
+      </section>
+    </main>
+    <script>
+      'use strict';
+      const fields = [
+        {
+          key: 'description',
+          label: 'What happened',
+          prompt: 'What happened to your vehicle?',
+          hint: 'Describe the incident and any damage you noticed.',
+          type: 'textarea',
+          min: 10,
+          max: 2000
+        },
+        {
+          key: 'incident_date',
+          label: 'Incident date',
+          prompt: 'When did the incident happen?',
+          hint: 'Enter the date of the incident.',
+          type: 'date'
+        },
+        {
+          key: 'location',
+          label: 'Incident location',
+          prompt: 'Where did it happen?',
+          hint: 'A street, town or nearby landmark works.',
+          type: 'text',
+          max: 160
+        },
+        {
+          key: 'policy_number',
+          label: 'Policy number',
+          prompt: 'What is your policy number?',
+          hint: 'You can find this on your insurance documents.',
+          type: 'text',
+          max: 80
+        },
+        {
+          key: 'email',
+          label: 'Contact email',
+          prompt: 'Which email can the claims team use?',
+          hint: 'Enter the address you use for claim updates.',
+          type: 'email',
+          max: 254
+        },
+        {
+          key: 'injury_status',
+          label: 'Injuries reported',
+          prompt: 'Was anyone injured?',
+          hint: 'If you are unsure, choose “I don’t know.”',
+          type: 'choice'
+        }
+      ];
+      const kinds = {
+        incident_report: 'Incident report',
+        itemized_quote: 'Itemized repair quote',
+        damage_photo: 'Damage photo'
+      };
+      const injuries = { yes: 'Yes', no: 'No', unknown: 'I don’t know' };
+      const names = ['Incident', 'Claim details', 'Documents', 'Review'];
+      const docsStep = fields.length,
+        reviewStep = docsStep + 1,
+        receiptStep = reviewStep + 1;
+      const historyEl = document.querySelector('#history'),
+        current = document.querySelector('#current'),
+        stages = document.querySelector('#stages');
+      let step = 0,
+        editing = false,
+        values = {},
+        files = [],
+        receipt = null,
+        sending = false,
+        uncertain = false,
+        needsNewId = false,
+        cachedBody = null,
+        requestId = null;
+      const el = (tag, className, text) => {
+        const item = document.createElement(tag);
+        if (className) item.className = className;
+        if (text !== undefined) item.textContent = text;
+        return item;
+      };
+      function button(text, className, handler) {
+        const b = el('button', 'btn ' + (className || ''), text);
+        b.type = 'button';
+        b.addEventListener('click', handler);
+        return b;
+      }
+      function addError(card) {
+        const p = el('p', 'error');
+        p.setAttribute('role', 'alert');
+        p.hidden = true;
+        card.append(p);
+        return function (message) {
+          p.textContent = message;
+          p.hidden = !message;
+        };
+      }
+      function status(text) {
+        document.querySelector('#announce').textContent = text;
+      }
+      function today() {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/Berlin',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).formatToParts(new Date());
+        const take = (type) => parts.find((p) => p.type === type).value;
+        return take('year') + '-' + take('month') + '-' + take('day');
+      }
+      function labelValue(field) {
+        return field.type === 'choice'
+          ? injuries[values[field.key]]
+          : values[field.key];
+      }
+      function resetBody() {
+        needsNewId = false;
+        cachedBody = null;
+        requestId = null;
+      }
+      function setStep(n, isEditing = false) {
+        step = n;
+        editing = isEditing;
+        render(true);
+      }
+      function finishField(field, value) {
+        if (values[field.key] !== value) resetBody();
+        values[field.key] = value;
+        setStep(editing ? reviewStep : step + 1);
+      }
+      function drawProgress() {
+        const stage =
+          step < 3 ? 0 : step < docsStep ? 1 : step === docsStep ? 2 : 3;
+        stages.replaceChildren();
+        names.forEach((name, i) => {
+          const li = el(
+            'li',
+            'stage ' +
+              (i < stage || receipt ? 'done' : stage === i ? 'active' : '')
+          );
+          if (i === stage && !receipt) li.setAttribute('aria-current', 'step');
+          li.append(el('span', 'dot'), document.createTextNode(name));
+          stages.append(li);
+        });
+      }
+      function heading(card, title, hint) {
+        const h = el('h2', '', title);
+        h.tabIndex = -1;
+        h.id = 'question-title';
+        card.append(h);
+        if (hint) card.append(el('p', 'help', hint));
+      }
+      function drawQuestion(card) {
+        const field = fields[step];
+        heading(card, field.prompt, field.hint);
+        if (field.type === 'choice') {
+          const choices = el('div', 'choices');
+          Object.entries(injuries).forEach(([key, text]) =>
+            choices.append(
+              button(text, values[field.key] === key ? 'primary' : '', () =>
+                finishField(field, key)
+              )
+            )
+          );
+          card.append(choices);
+        } else {
+          const form = el('form');
+          const input = el(field.type === 'textarea' ? 'textarea' : 'input');
+          if (field.type !== 'textarea') input.type = field.type;
+          input.id = 'answer';
+          input.name = field.key;
+          input.required = true;
+          input.setAttribute('aria-labelledby', 'question-title');
+          if (field.type === 'email') {
+            input.pattern = '[^\\s@]+@[^\\s@]+[.][^\\s@]+';
+            input.title =
+              'Enter an email address with a domain, for example alex@example.com.';
+          }
+          if (field.max) input.maxLength = field.max;
+          if (field.min) input.minLength = field.min;
+          if (field.type === 'date') input.max = today();
+          input.autocomplete = field.type === 'email' ? 'email' : 'off';
+          input.value = values[field.key] || '';
+          if (field.type === 'textarea')
+            input.placeholder = 'Describe what happened…';
+          const go = el(
+            'button',
+            'btn primary',
+            editing ? 'Save answer' : 'Continue'
+          );
+          go.type = 'submit';
+          const actions = el('div', 'actions');
+          actions.append(go);
+          form.append(input, actions);
+          card.append(form);
+          input.addEventListener('input', () => input.setCustomValidity(''));
+          form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const val = input.value.trim();
+            if (!val || (field.min && val.length < field.min)) {
+              input.setCustomValidity(
+                field.min
+                  ? 'Please enter at least ' + field.min + ' characters.'
+                  : 'Please enter an answer.'
+              );
+              input.reportValidity();
+              return;
+            }
+            finishField(field, val);
+          });
+        }
+        if (editing)
+          card.append(
+            button('Cancel edit', 'quiet', () => setStep(reviewStep))
+          );
+        else if (step > 0)
+          card.append(button('Back', 'quiet', () => setStep(step - 1)));
+      }
+      function documentList(removable, onChange) {
+        const ul = el('ul', 'files');
+        ul.setAttribute('aria-label', 'Attachments');
+        files.forEach((doc, i) => {
+          const li = el('li', 'file'),
+            info = el('div');
+          info.append(
+            el('small', '', kinds[doc.kind]),
+            el('span', '', doc.file.name)
+          );
+          li.append(info);
+          if (removable) {
+            const b = button('Remove', 'quiet', () => {
+              files.splice(i, 1);
+              resetBody();
+              onChange();
+            });
+            b.setAttribute('aria-label', 'Remove ' + doc.file.name);
+            li.append(b);
+          }
+          ul.append(li);
+        });
+        return ul;
+      }
+      function drawDocuments(card) {
+        heading(
+          card,
+          'Which documents can you attach?',
+          'You can submit with missing documents. Add up to 3 PDF, JPG or PNG files, up to 2 MiB each.'
+        );
+        const kind = el('select');
+        kind.id = 'doc-kind';
+        for (const [key, label] of Object.entries(kinds)) {
+          const o = el('option', '', label);
+          o.value = key;
+          kind.append(o);
+        }
+        const kindLabel = el('label', 'label', 'Document type');
+        kindLabel.htmlFor = kind.id;
+        const fileLabel = el('label', 'label', 'Choose files');
+        const input = el('input');
+        input.id = 'doc-files';
+        input.type = 'file';
+        input.accept =
+          '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
+        input.multiple = true;
+        fileLabel.htmlFor = input.id;
+        const area = el('div', 'docs-area');
+        area.append(kindLabel, kind, fileLabel, input);
+        card.append(area);
+        const report = addError(card);
+        const list = el('div');
+        card.append(list);
+        const controls = el('div', 'actions');
+        const proceed = button('Review claim', 'primary', () =>
+          setStep(reviewStep)
+        );
+        controls.append(
+          proceed,
+          button('Back', 'quiet', () =>
+            setStep(editing ? reviewStep : docsStep - 1)
+          )
+        );
+        card.append(controls);
+        const refresh = () => {
+          const full = files.length >= 3;
+          input.disabled = full;
+          kind.disabled = full;
+          list.replaceChildren(
+            documentList(true, () => {
+              report('');
+              refresh();
+            })
+          );
+        };
+        input.addEventListener('change', () => {
+          const add = Array.from(input.files || []);
+          input.value = '';
+          if (!add.length) return;
+          if (add.length + files.length > 3) {
+            report(
+              'A claim can include up to 3 files. Remove an attachment or select fewer files.'
+            );
+            return;
+          }
+          for (const file of add) {
+            if (
+              file.name.length > 180 ||
+              file.name !== file.name.trim() ||
+              /[\x00-\x1f\x7f\/\\]/.test(file.name)
+            ) {
+              report(
+                'Choose a filename up to 180 characters without path separators or control characters.'
+              );
+              return;
+            }
+            if (!file.size || file.size > 2 * 1024 * 1024) {
+              report(file.name + ' must contain data and be at most 2 MiB.');
+              return;
+            }
+            if (!/\.(pdf|png|jpe?g)$/i.test(file.name)) {
+              report('Choose a PDF, JPG or PNG file.');
+              return;
+            }
+          }
+          files.push(...add.map((file) => ({ kind: kind.value, file })));
+          resetBody();
+          report('');
+          refresh();
+          status(
+            add.length === 1
+              ? 'File attached.'
+              : add.length + ' files attached.'
+          );
+        });
+        refresh();
+      }
+      function line(label, value, action) {
+        const row = el('div', 'field'),
+          wrap = el('div');
+        wrap.append(el('dt', '', label), el('dd', '', value));
+        row.append(wrap);
+        if (action) {
+          const b = button('Edit', 'quiet', action);
+          b.setAttribute('aria-label', 'Edit ' + label);
+          row.append(b);
+        }
+        return row;
+      }
+      function makeUuid() {
+        if (crypto.randomUUID) return crypto.randomUUID();
+        const b = crypto.getRandomValues(new Uint8Array(16));
+        b[6] = (b[6] & 15) | 64;
+        b[8] = (b[8] & 63) | 128;
+        const hex = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(
+          ''
+        );
+        return [
+          hex.slice(0, 8),
+          hex.slice(8, 12),
+          hex.slice(12, 16),
+          hex.slice(16, 20),
+          hex.slice(20)
+        ].join('-');
+      }
+      function base64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () =>
+            reject(
+              new Error(
+                'Could not read ' +
+                  file.name +
+                  '. Remove it and select the file again.'
+              )
+            );
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.readAsDataURL(file);
+        });
+      }
+      async function submitClaim(card, report) {
+        if (sending) return;
+        sending = true;
+        const setDisabled = (v) =>
+          card.querySelectorAll('button').forEach((b) => {
+            b.disabled = v;
+          });
+        setDisabled(true);
+        const send = card.querySelector('[data-send]');
+        send.textContent = 'Submitting…';
+        report('');
+        try {
+          if (!cachedBody) {
+            requestId = requestId || makeUuid();
+            const documents = await Promise.all(
+              files.map(async (d) => ({
+                kind: d.kind,
+                name: d.file.name,
+                content_base64: await base64(d.file)
+              }))
+            );
+            cachedBody = JSON.stringify(
+              Object.assign({ request_id: requestId }, values, { documents })
+            );
+          }
+          uncertain = true;
+          const response = await fetch('/api/intakes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: cachedBody
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            if (response.status === 409) {
+              uncertain = false;
+              needsNewId = true;
+              throw new Error(
+                'This submission ID belongs to a different claim. Check your details and select “Submit as new claim” to send a separate report.'
+              );
+            }
+            if ([400, 413, 415, 422].includes(response.status)) {
+              uncertain = false;
+              cachedBody = null;
+              throw new Error(
+                typeof data.error === 'string'
+                  ? data.error
+                  : 'Check your answers and attachments, then submit again.'
+              );
+            }
+            throw new Error(
+              'We couldn’t confirm receipt. Retry this submission to check its status.'
+            );
+          }
+          if (
+            typeof data.reference !== 'string' ||
+            !data.reference.trim() ||
+            !Number.isInteger(data.document_count) ||
+            !Array.isArray(data.missing_documents)
+          )
+            throw new Error(
+              'We couldn’t read the receipt. Retry this submission to retrieve it.'
+            );
+          receipt = data;
+          values = {};
+          files = [];
+          cachedBody = null;
+          requestId = null;
+          uncertain = false;
+          step = receiptStep;
+          sending = false;
+          render(true);
+          return;
+        } catch (error) {
+          sending = false;
+          render(false);
+          const failure = current.querySelector('[role=alert]');
+          failure.hidden = false;
+          failure.textContent =
+            error instanceof TypeError
+              ? 'Connection interrupted. Retry this submission when you are connected.'
+              : error.message;
+          current.querySelector('[data-send]').focus();
+        }
+      }
+      function drawReview(card) {
+        heading(
+          card,
+          'Ready to submit your claim?',
+          'Check your answers and attachments. Submitting sends them to the claims team.'
+        );
+        const dl = el('dl', 'review');
+        fields.forEach((field, i) =>
+          dl.append(
+            line(
+              field.label,
+              labelValue(field),
+              uncertain ? null : () => setStep(i, true)
+            )
+          )
+        );
+        dl.append(
+          line(
+            'Documents',
+            files.length
+              ? files.map((d) => kinds[d.kind] + ' · ' + d.file.name).join('\n')
+              : 'No documents attached',
+            uncertain ? null : () => setStep(docsStep, true)
+          )
+        );
+        card.append(dl);
+        const report = addError(card);
+        const buttons = el('div', 'actions');
+        const submit = button(
+          needsNewId
+            ? 'Submit as new claim'
+            : uncertain
+              ? 'Retry submission'
+              : 'Submit claim',
+          'primary',
+          () => {
+            if (needsNewId) resetBody();
+            submitClaim(card, report);
+          }
+        );
+        submit.dataset.send = 'true';
+        buttons.append(submit);
+        card.append(buttons);
+      }
+      function drawReceipt(card) {
+        heading(
+          card,
+          'Claim received',
+          'Keep this reference for your records.'
+        );
+        card.append(el('p', 'reference', receipt.reference));
+        const dl = el('dl', 'review');
+        dl.append(line('Documents received', String(receipt.document_count)));
+        const missing = receipt.missing_documents.map((k) => kinds[k] || k);
+        if (missing.length)
+          dl.append(line('Documents still missing', missing.join(', ')));
+        card.append(dl);
+        const actions = el('div', 'actions');
+        actions.append(
+          button('Report another claim', 'primary', () => {
+            values = {};
+            files = [];
+            receipt = null;
+            resetBody();
+            uncertain = false;
+            setStep(0);
+          })
+        );
+        card.append(actions);
+      }
+      function render(focus) {
+        drawProgress();
+        historyEl.replaceChildren();
+        if (step < reviewStep && !editing) {
+          fields.slice(0, Math.min(step, docsStep)).forEach((field) => {
+            const prior = el('div', 'past');
+            prior.append(
+              el('small', '', field.prompt),
+              el('p', '', labelValue(field))
+            );
+            historyEl.append(prior);
+          });
+        }
+        const card = el('div', 'card');
+        current.replaceChildren(card);
+        if (receipt) drawReceipt(card);
+        else if (step === docsStep) drawDocuments(card);
+        else if (step === reviewStep) drawReview(card);
+        else drawQuestion(card);
+        if (focus) {
+          const h = card.querySelector('h2');
+          h.focus({ preventScroll: true });
+          card.scrollIntoView({ block: 'nearest' });
+        }
+      }
+      render(false);
+    </script>
+  </body>
+</html>

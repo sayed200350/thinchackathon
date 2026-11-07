@@ -145,3 +145,7 @@ class SupabaseStore:
         if result not in ('created', 'replayed'):
             raise RequestError(503, 'Supabase returned an unknown correction receipt. Retry with the same request ID.')
         return (201 if result == 'created' else 200), self.case_detail(case_id)
+
+    def save_intake(self, payload):
+        from .intake import save_intake_supabase
+        return save_intake_supabase(self, payload)
