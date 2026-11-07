@@ -4,6 +4,10 @@ Taktile track · thinc! hack MUC · 7–8 November 2026
 
 Policy Replay will help a motor-insurance reviewer answer one question when a policy changes: **Which open claims need a second look, and why?** The weekend deliverable is a CSV decision engine and a reviewer app that explains the same decisions.
 
+## Hosted database for Lovable
+
+The Thinc Supabase project serves the reviewer app. See the [connection details, schema and smoke test](contract/db/README.md) for the live project URL, frontend access, and the seeded v1 data.
+
 ## Run the reviewer API
 
 From the repository root, start the local service with Python 3.9 or newer:

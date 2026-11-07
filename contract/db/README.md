@@ -1,30 +1,36 @@
-# Datenbank-Contract (Supabase)
+# Hosted demo database
 
-Eigenes Supabase-Projekt (**nicht** Lovable Cloud). Schema: [`schema.sql`](schema.sql), idempotent, im Supabase SQL Editor ausführen.
-Gemeinsame Schnittstelle: Änderungen nur mit Nachricht an alle Betroffenen + Datei in `team/decisions/`.
-Feldnamen folgen dem Engine-Contract ([`../decision-result.md`](../decision-result.md), [`../example-result-DEV-001.json`](../example-result-DEV-001.json)).
+Policy Replay runs in the free **Thinc** organization, project `bdbvfcfmlhpfefdtrbkd`. Sayed owns the schema, engine imports and evaluation data. Rafik connects the Lovable UI to this database. The [SQLite reviewer API](../api.md) is available for offline demos.
 
-## Wer schreibt was
+- [Supabase project dashboard](https://supabase.com/dashboard/project/bdbvfcfmlhpfefdtrbkd)
+- [Hosted Table Editor](https://supabase.com/dashboard/project/bdbvfcfmlhpfefdtrbkd/editor)
+- **Project URL:** `https://bdbvfcfmlhpfefdtrbkd.supabase.co`
+- **Browser key:** In the project overview, choose **Copy project URL and API keys → Copy Publishable key**. Use the existing `sb_publishable_…` key.
 
-| Tabelle | Schreiber | Key | Inhalt |
-| --- | --- | --- | --- |
-| `decisions` | Engine (`engine/`, A) | Service Role | ein Engine-JSON pro `(case_id, policy_version)`, Upsert |
-| `validation_results` | Validator (`eval/`, A) | Service Role | erwartete Empfehlung + erwartete Änderung, `source` = `labelled` \| `edge_case` |
-| `overrides` | Reviewer-App (`app/`, B, Lovable) | anon | nur Insert, nur für offene Claims (RLS); nie Update/Delete |
-| `business_metrics` | BWL (B) | Supabase Table Editor | Kennzahlen für den Business Case |
+## Connect Lovable
 
-Views (nur lesen, anon): `v_compare` (v1 gegen v2 pro Fall, `needs_recheck`, letzte Korrektur), `v_transition`, `v_rule_impact`, `v_change_check` (Vier-Felder: erwartete gegen tatsächliche Änderung), `v_error_rate`, `v_kpis` (inkl. `closed_changed`, Ziel 0).
+Set `VITE_SUPABASE_URL` to the project URL and `VITE_SUPABASE_PUBLISHABLE_KEY` to the publishable key (or use the names already consumed by the frontend’s Supabase client). Only the publishable key belongs in the browser. Sayed’s ignored local `.env` stores these values under the shared repo names `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 
-## Keys
+| Screen | Read or write |
+| --- | --- |
+| Claims queue | Read `v_compare`, ordered by `case_id`. Until v2 arrives, the v2 decision and open-case recheck flag are null. Closed cases retain a false recheck flag. |
+| Case detail | Read `claims` by case ID for the summary and raw CSV fields. Read `decisions` by case ID and policy version for the normalized evidence, recommendation, rule ID, original policy clause and explanation. |
+| Reviewer correction | Insert a row in `overrides` for an open case. Send `case_id`, `policy_version`, `original_recommendation` from the engine, `corrected_recommendation`, `reason`, `reviewer`, and a unique `request_id`. Use the same ID on retry. On duplicate, read the existing entry by that ID and compare its contents. |
+| Audit history | Read `overrides` by case ID, ordered by `created_at` and `id`. Reload `decisions` to show the original alongside the reviewer’s correction. |
+| Evaluation and business case | Read `v_error_rate`, `v_kpis`, `v_rule_impact`, `v_transition` and `v_change_check`. The team can enter business assumptions in `business_metrics` through the dashboard. |
 
-- `SUPABASE_URL`: alle.
-- `SUPABASE_ANON_KEY`: nur die Lovable-App. Darf im Browser liegen; RLS erlaubt nur Lesen + Insert in `overrides`.
-- `SUPABASE_SERVICE_ROLE_KEY`: nur Engine und Validator (lokal/Server). Umgeht RLS. **Nie** ins Frontend, nie committen.
-- Lokal in `.env` (gitignored), Vorlage: `/.env.example`.
+The browser roles can read the fictional demo data and append reviewer actions. Their insert access is restricted to the seven correction fields. Row-level security checks the original decision, the open status and the target route. The database supplies the audit ID and timestamp. Reviewer names in this hackathon demo are self-reported.
 
-## Regeln
+## Reproduce the setup
 
-- `decisions` ist die unveränderte Engine-Entscheidung. Korrekturen landen ausschließlich in `overrides` (Audit-Historie, nur anhängen).
-- Geschlossene Claims: v2 übernimmt die v1-Empfehlung, `needs_recheck` = false, keine Korrekturen.
-- `supporting_facts` sind die entscheidenden Fakten (bei `v1.1` die Auslöser, bei `v1.2`/`v1.missing` die fehlenden Angaben, bei `v1.3` alle geprüften Felder); `null` = unbekannt.
-- `policy_clause` ist optional, bis A festlegt, woher der Klauseltext kommt.
+1. Run [schema.sql](schema.sql) in the Supabase SQL Editor. It creates five tables, six views and the browser permissions.
+2. From the repo root, run `python3 -m backend.supabase_seed > /tmp/policy-replay-seed.sql`. Run its contents in the SQL Editor. The seed inserts 26 official fictional claims, their 26 v1 engine decisions and the 14 supplied development labels. It checks existing snapshots and rolls back on conflicting data.
+3. Run [the smoke test](../../backend/supabase_smoke.sql) in the SQL Editor. It checks actual browser-role grants, reads the fixtures, inserts and reloads a correction for DEV-001, and rolls it back. The audit queue stays clean.
+4. With a publishable key in your shell, verify frontend access through the Data API:
+
+   ```sh
+   curl -fsS -H "apikey: ${SUPABASE_ANON_KEY}" \
+     'https://bdbvfcfmlhpfefdtrbkd.supabase.co/rest/v1/v_compare?case_id=eq.DEV-001&select=case_id,recommendation_v1,recommendation_v2,needs_recheck'
+   ```
+
+The hosted setup was checked on 7 November 2026. The browser-role test returned 26 decisions, 14 matching development labels and two closed cases. Readback through the Data API confirmed 24 open cases and zero saved overrides immediately after setup. No v2 expectations have been imported. Sayed maintains the validation labels after the official update, using independent expected outcomes reviewed with Rafik.
