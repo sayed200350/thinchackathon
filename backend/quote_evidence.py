@@ -87,9 +87,11 @@ def _read_pdf_pages(content):
 def assess_quote(doc):
     if not isinstance(doc, dict) or doc.get('kind', 'itemized_quote') != 'itemized_quote':
         raise RequestError(400, 'Choose a repair estimate to check.')
-    validated = _validate_document(dict(doc, kind='itemized_quote'))
+    validated = _validate_document(dict(doc, kind='itemized_quote'), enhanced=True)
     result = _result(validated['name'])
     if not validated['name'].lower().endswith('.pdf'):
+        result.update(review_required=True, garage_request='',
+                      reason='The claims team will check the amount and cost breakdown in this photo during manual review.')
         return result
     pages = _read_pdf_pages(base64.b64decode(validated['content_base64']))
     if not pages:

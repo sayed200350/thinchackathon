@@ -194,7 +194,7 @@ class GarageGatewayTests(unittest.TestCase):
         self.assertEqual(len(self.up.seen), 5)
 
     def test_upload_limits_and_cross_site_posts_are_rejected_before_upstream(self):
-        for route, size in (('status', 8193), ('upload', 3 * 1024 * 1024 + 1)):
+        for route, size in (('status', 8193), ('upload', 17 * 1024 * 1024)):
             code, _, _ = self.request(
                 'POST',
                 '/api/garage/' + route,

@@ -1,4 +1,4 @@
-"""One expiring garage capability grants a single repair-quote PDF upload."""
+"""One expiring garage capability grants a single original repair-quote upload."""
 
 import base64
 from datetime import datetime, timezone
@@ -87,15 +87,13 @@ def status(store, garage_token, secret):
 
 
 def upload(store, garage_token, document, secret):
-    """Accept {kind: 'itemized_quote', name: 'filename.pdf', content_base64: '…'}."""
+    """Accept one original PDF, JPEG or PNG as an itemized_quote attachment."""
     claimant, revision, record, stage = _resolve(store, garage_token, secret)
     if stage == 'closed':
         raise RequestError(409, 'This garage link is closed.')
     if not isinstance(document, dict) or document.get('kind') != 'itemized_quote':
-        raise RequestError(400, 'Choose a repair quote PDF.')
-    doc = _validate_document(document)
-    if not doc['name'].lower().endswith('.pdf'):
-        raise RequestError(400, 'Choose a repair quote PDF.')
+        raise RequestError(400, 'Choose a repair quote as a PDF, JPEG or PNG.')
+    doc = _validate_document(document, enhanced=True)
     state = record['state']
     if stage == 'received':
         # All files are append-only. This historical offset cannot authorize a new
@@ -127,7 +125,7 @@ def upload(store, garage_token, document, secret):
     except RequestError as exc:
         if exc.status == 409:
             raise RequestError(
-                409, 'The request changed or a different PDF was already received. Reopen the garage link.'
+                409, 'The request changed or a different file was already received. Reopen the garage link.'
             ) from None
         raise RequestError(503, 'Garage uploads are temporarily unavailable.') from None
     return {'status': 'received'}

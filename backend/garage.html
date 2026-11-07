@@ -23,6 +23,8 @@
     input[type=file] { display:block; width:100%; min-width:0; }
     input::file-selector-button, button { font:inherit; font-weight:600; padding:10px 14px; color:var(--ink); background:#fff; border:1px solid var(--line); border-radius:7px; cursor:pointer; }
     input::file-selector-button { margin-right:8px; }
+    #pickers { display:grid; gap:9px; }
+    #take { justify-self:start; }
     button[type=submit] { color:#fff; background:var(--accent); border-color:var(--accent); }
     button:disabled { opacity:.5; cursor:default; }
     :focus-visible { outline:3px solid #26754a; outline-offset:3px; }
@@ -33,6 +35,8 @@
     .sample-row { display:flex; align-items:center; flex-wrap:wrap; gap:5px 14px; }
     .sample-row a { font-size:14px; }
     #selection { font-weight:600; overflow-wrap:anywhere; margin:2px 0; }
+    #preview { display:block; width:100%; max-height:46vh; margin:0 0 8px; object-fit:contain; background:#f4f6f2; border-radius:7px; }
+    .file-actions { display:flex; flex-wrap:wrap; gap:6px; }
     .error { color:#922f1e; margin:0; }
     [hidden] { display:none !important; }
   </style>
@@ -44,9 +48,25 @@
     <p id="intro" aria-live="polite"></p>
     <section class="panel" id="upload-panel" hidden>
       <form id="upload-form">
-        <label for="pdf"><strong>Choose quote PDF</strong></label>
-        <span class="hint" id="limit">PDF · up to 2 MiB</span>
-        <input type="file" id="pdf" accept="application/pdf,.pdf" aria-describedby="limit">
+        <div id="pickers">
+          <button type="button" id="take" aria-describedby="limit">Take a photo</button>
+          <label for="file"><strong>Choose a file or gallery photo</strong></label>
+          <input type="file" id="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" aria-describedby="limit">
+        </div>
+        <input type="file" id="camera" accept="image/jpeg,image/png" capture="environment" hidden>
+        <span class="hint" id="limit">JPEG or PNG up to 12 MiB. PDF up to 2 MiB.</span>
+        <p class="hint" aria-live="polite" id="selection"></p>
+        <div id="review-file" hidden>
+          <div id="photo-preview" hidden>
+            <img id="preview" alt="Quote photo preview">
+            <p class="hint">Check that the repair work, prices and total are easy to read.</p>
+          </div>
+          <div class="file-actions">
+            <button type="button" id="retake">Retake photo</button>
+            <button type="button" id="replace">Replace file</button>
+            <button type="button" id="remove">Remove file</button>
+          </div>
+        </div>
         <div id="examples" hidden>
           <details open>
             <summary>Sample quotes for this demo</summary>
@@ -62,7 +82,6 @@
             </div>
           </details>
         </div>
-        <p class="hint" aria-live="polite" id="selection"></p>
         <p class="error" role="alert" id="error" hidden></p>
         <button type="submit" id="send" disabled>Send quote</button>
       </form>
@@ -73,9 +92,11 @@
     'use strict';
     const get = id => document.getElementById(id);
     const token = new URLSearchParams(location.hash.slice(1)).get('upload');
-    const picker = get('pdf');
+    const picker = get('file');
+    const camera = get('camera');
     const send = get('send');
     let selected = null;
+    let photoUrl = '';
     let sending = false;
     let choice = 0;
 
@@ -97,7 +118,7 @@
       get('intro').textContent = message;
       get('upload-panel').hidden = !open;
       get('retry').hidden = true;
-      if (!open) { ++choice; selected = null; picker.value = ''; }
+      if (!open) { beginChoice(); picker.value = camera.value = ''; }
     }
 
     function unavailable() {
@@ -105,7 +126,7 @@
     }
 
     function received() {
-      view('Quote received', 'Your PDF has been added to the claim. You can close this page.');
+      view('Quote received', 'Your quote has been added to the claim. You can close this page.');
     }
 
     async function open() {
@@ -116,7 +137,7 @@
         if (result.status === 'received') return received();
         if (result.status === 'closed') return unavailable();
         if (result.status !== 'open') throw new Error('Unexpected status');
-        view('Send an itemized quote', 'Include the repair work, the cost of each item, and the final total.', true);
+        view('Send an itemized quote', 'Include the repair work, each price and the final total. For a photo, fit all four corners of the page in the frame.', true);
         get('examples').hidden = result.demo !== true;
       } catch (error) {
         if ([400,403,404,410].includes(error.status)) return unavailable();
@@ -132,6 +153,10 @@
 
     function beginChoice(message = '') {
       selected = null;
+      photoUrl = '';
+      get('preview').removeAttribute('src');
+      get('review-file').hidden = get('photo-preview').hidden = true;
+      get('pickers').hidden = false;
       send.disabled = true;
       showError('');
       get('selection').textContent = message;
@@ -140,22 +165,62 @@
 
     async function stage(file, current) {
       if (!file || current !== choice) return;
-      get('selection').textContent = '';
-      if (!/\.pdf$/i.test(file.name) || file.size < 5 || file.size > 2 * 1024 * 1024)
-        return showError('Choose a PDF up to 2 MiB.');
+      const ext = file.name.split('.').pop().toLowerCase();
+      const type = {pdf:'application/pdf', jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png'}[ext];
+      if (!file.name.includes('.') || typeof type !== 'string')
+        return showError('Choose a JPEG or PNG photo, or a PDF.');
+      const isPhoto = type !== 'application/pdf';
+      if (file.size > (isPhoto ? 12 : 2) * 1024 * 1024)
+        return showError(isPhoto ? 'Choose a photo up to 12 MiB.' : 'Choose a PDF up to 2 MiB.');
       try {
-        const header = await file.slice(0, 5).text();
+        const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+        const signature = {
+          'application/pdf':[37,80,68,70,45],
+          'image/jpeg':[255,216,255],
+          'image/png':[137,80,78,71,13,10,26,10]
+        }[type];
         if (current !== choice) return;
-        if (header !== '%PDF-') return showError('Choose a readable PDF file.');
+        if (!signature.every((byte, index) => byte === header[index]))
+          return showError('This file does not match its format. Choose the original photo or PDF.');
+        if (isPhoto) {
+          get('selection').textContent = 'Opening photo preview…';
+          // Supply the verified MIME type even if the phone left it blank. Slicing
+          // a Blob with a new type preserves every byte of the camera original.
+          const url = await readDataUrl(file.slice(0, file.size, type));
+          const probe = new Image();
+          probe.src = url;
+          await probe.decode();
+          if (current !== choice) return;
+          photoUrl = url;
+          get('preview').src = url;
+        }
         selected = file;
         send.disabled = false;
         get('selection').textContent = 'Ready to send · ' + file.name;
+        get('photo-preview').hidden = get('retake').hidden = !isPhoto;
+        get('review-file').hidden = false;
+        get('pickers').hidden = true;
       } catch {
-        if (current === choice) showError('Couldn’t read that file. Choose the PDF again.');
+        if (current === choice) {
+          get('selection').textContent = '';
+          showError('Couldn’t read that file. Choose the original photo or PDF again.');
+        }
       }
     }
 
-    picker.addEventListener('change', () => stage(picker.files[0], beginChoice()));
+    for (const input of [picker, camera]) {
+      input.addEventListener('change', () => {
+        if (input.files[0]) stage(input.files[0], beginChoice());
+      });
+    }
+    get('take').addEventListener('click', () => camera.click());
+    get('retake').addEventListener('click', () => camera.click());
+    get('replace').addEventListener('click', () => picker.click());
+    get('remove').addEventListener('click', () => {
+      picker.value = camera.value = '';
+      beginChoice();
+      get('take').focus();
+    });
 
     for (const example of document.querySelectorAll('[data-example]')) {
       example.addEventListener('click', async () => {
@@ -186,10 +251,10 @@
       });
     }
 
-    function encode(file) {
+    function readDataUrl(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
@@ -198,12 +263,15 @@
     get('upload-form').addEventListener('submit', async event => {
       event.preventDefault();
       if (!selected || sending) return;
-      sending = picker.disabled = send.disabled = true;
+      sending = true;
+      const controls = document.querySelectorAll('#upload-form button, #upload-form input');
+      for (const control of controls) control.disabled = true;
       send.textContent = 'Sending…';
       showError('');
       try {
-        const document = {kind:'itemized_quote', name:selected.name, content_base64:await encode(selected)};
-        const result = await post('upload', {token, document});
+        const dataUrl = photoUrl || await readDataUrl(selected);
+        const attachment = {kind:'itemized_quote', name:selected.name, content_base64:dataUrl.slice(dataUrl.indexOf(',') + 1)};
+        const result = await post('upload', {token, document:attachment});
         if (result.status !== 'received') throw new Error('Unexpected status');
         received();
       } catch (error) {
@@ -211,9 +279,10 @@
           await open();
         }
         if (!get('upload-panel').hidden)
-          showError('The upload could not be confirmed. Check your connection and send the same PDF again.');
+          showError('The upload could not be confirmed. Check your connection and try sending the same file again.');
       } finally {
-        sending = picker.disabled = false;
+        sending = false;
+        for (const control of controls) control.disabled = false;
         send.disabled = !selected;
         send.textContent = 'Send quote';
       }

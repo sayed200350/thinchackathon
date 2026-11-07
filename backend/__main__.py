@@ -12,7 +12,7 @@ import sys
 from urllib.parse import unquote, urlsplit
 
 from .chat import answer
-from .intake import initialize_intakes, validate_intake
+from .intake import EVIDENCE_FILE_REQUEST_LIMIT, initialize_intakes, validate_intake
 from .intake_links import append_documents, initialize_intake_links, resolve_link, save_draft, submit_linked
 from .intake_pdf import extract_pdf
 from .quote_evidence import assess_quote, demo_replay, QUOTE_EXAMPLES
@@ -103,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
             raise RequestError(400, "Malformed JSON.")
 
     def garage_request(self, action):
-        limit = 3 * 1024 * 1024 if action == "upload" else 8192
+        limit = EVIDENCE_FILE_REQUEST_LIMIT if action == "upload" else 8192
         body = self.read_json(limit)
         expected = {"token", "document"} if action == "upload" else {"token"}
         if not isinstance(body, dict) or body.keys() != expected:
@@ -140,7 +140,7 @@ class Handler(BaseHTTPRequestHandler):
             return 200, extract_pdf(self.read_json(3 * 1024 * 1024))
         if self.command == "POST" and parts[:2] == ["api", "evidence"] and len(parts)==3:
             action = parts[2]
-            body = self.read_json(3*1024*1024 if action in ("quote","replay") else 65536)
+            body = self.read_json(EVIDENCE_FILE_REQUEST_LIMIT if action in ("quote","replay") else 65536)
             if not isinstance(body, dict):
                 raise RequestError(400, "Send a JSON object.")
             if action in ("quote","replay"):

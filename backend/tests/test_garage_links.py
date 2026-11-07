@@ -1,4 +1,4 @@
-"""A garage can contribute one PDF to the requested quote revision."""
+"""A garage can contribute one original quote document to the requested revision."""
 
 import base64
 from concurrent.futures import ThreadPoolExecutor
@@ -7,10 +7,12 @@ from datetime import datetime
 import os
 from pathlib import Path
 from secrets import token_hex
+import struct
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 from uuid import uuid4
+import zlib
 
 from backend import evidence_storage, garage_links as garage
 from backend.evidence_cases import claimant_action, staff_action
@@ -24,6 +26,15 @@ from backend.tests.test_intake import attachment, claim, PNG
 def quote(filename):
     contents = (Path(__file__).resolve().parents[1] / 'fixtures' / 'quotes' / filename).read_bytes()
     return attachment(filename, 'itemized_quote', contents)
+
+
+def original_png():
+    # A real, decodable 1024x768 RGB image. Stored DEFLATE blocks keep it over 2 MiB.
+    def chunk(kind, data):
+        return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
+    header = struct.pack('>IIBBBBB', 1024, 768, 8, 2, 0, 0, 0)
+    pixels = (b'\0' + b'\x18\x42\x63' * 1024) * 768
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', header) + chunk(b'IDAT', zlib.compress(pixels, 0)) + chunk(b'IEND', b'')
 
 
 class GarageFlow:
@@ -68,6 +79,28 @@ class GarageFlow:
             garage.upload(self.db, fresh, quote('itemized-1800.pdf'), self.secret), {'status': 'received'}
         )
         self.assertEqual(garage.upload(self.db, token, self.revised, self.secret), {'status': 'received'})
+
+    def test_garage_photo_originals_reach_staff_byte_for_byte(self):
+        receipt = self.submit()
+        samples = [
+            ('Werkstatt.PNG', original_png()),
+            ('Werkstatt.jpeg', (Path(__file__).resolve().parents[1] / 'fixtures/photo-guide/close-up.jpg').read_bytes()),
+        ]
+        self.assertGreater(len(samples[0][1]), 2 * 1024 * 1024)
+        staff = {'reference': receipt['reference'], 'reviewer_key': self.secret}
+        for position, (filename, content) in enumerate(samples, start=1):
+            with self.subTest(filename=filename):
+                token = garage.issue(self.db, self.claimant, self.secret)['token']
+                photo = attachment(filename, 'itemized_quote', content)
+                self.assertEqual(garage.upload(self.db, token, photo, self.secret), {'status': 'received'})
+                self.assertEqual(garage.upload(self.db, token, photo, self.secret), {'status': 'received'})
+                evidence = staff_action(self.db, 'reviewer', staff, self.secret)['evidence']
+                self.assertTrue(evidence['quotes'][-1]['review_required'])
+                self.assertEqual(len(evidence['history']), position + 1)
+                self.assertNotEqual(evidence['decision']['recommendation'], 'routine_processing')
+                original = staff_action(self.db, 'document', dict(staff, position=position), self.secret)
+                self.assertEqual(original['name'], filename)
+                self.assertTrue(base64.b64decode(original['content_base64']) == content)
 
 
 class SQLiteGarageTests(GarageFlow, unittest.TestCase):
@@ -122,12 +155,12 @@ class SQLiteGarageTests(GarageFlow, unittest.TestCase):
             self.fails(403, garage.status, self.db, grant['token'], self.secret)
             self.fails(403, garage.upload, self.db, grant['token'], self.revised, self.secret)
 
-    def test_only_pdf_quotes_are_accepted_and_claimant_quote_closes_old_slot(self):
+    def test_invalid_quote_rejected_and_claimant_quote_closes_old_slot(self):
         self.submit()
         token = garage.issue(self.db, self.claimant, self.secret)['token']
         for doc in [
             attachment(),
-            attachment('piece.png', 'itemized_quote', PNG),
+            attachment('piece.jpeg', 'itemized_quote', PNG),
             dict(self.revised, role='garage'),
             dict(self.revised, kind=[]),
         ]:

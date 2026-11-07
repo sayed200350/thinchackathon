@@ -456,6 +456,10 @@
         border-radius: 11px;
         text-align: center;
       }
+      .opening-image {
+        display:block; max-width:100%; width:auto; max-height:44vh; margin:12px auto 20px;
+        background:var(--ground); border:1px solid var(--line); border-radius:8px;
+      }
       .drop-zone.over {
         background: #deefdf;
         border-color: var(--accent);
@@ -615,7 +619,7 @@
       <aside class="side">
         <h1>Report a motor claim</h1>
         <p class="sub">
-          Start with your accident report or tell us what happened.
+          Start with a photo or report, or tell us what happened.
         </p>
         <ol class="stages" id="stages" aria-label="Claim progress"></ol>
       </aside>
@@ -716,8 +720,9 @@
       const receiptStep = -3;
       const requiredKinds = ['incident_report', 'itemized_quote'];
       const maxFiles = 4;
-      const maxPhotoBytes = 12 * 1024 * 1024;
+      const maxImageBytes = 12 * 1024 * 1024;
       const maxBytes = 2 * 1024 * 1024;
+      const intakeFormats = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
       const historyEl = document.querySelector('#history');
       const current = document.querySelector('#current');
       const stages = document.querySelector('#stages');
@@ -910,7 +915,7 @@
       function drawProgress() {
         document.querySelector('.sub').textContent = demoCase
           ? 'Fictional sample claim · ' + demoCase
-          : 'Start with your accident report or tell us what happened.';
+          : 'Start with a photo or report, or tell us what happened.';
         const stage = receipt
           ? 4
           : step < 3
@@ -959,36 +964,27 @@
           : values[field.key];
       }
 
-      function validateFile(file, onlyPDF = false, kind = '') {
-        const photo = kind === 'damage_photo';
-        const sizeLimit = photo ? maxPhotoBytes : maxBytes;
-        if (!file || !file.size || file.size > sizeLimit)
-          throw new Error('Choose a non-empty file up to ' + (photo ? '12' : '2') + ' MiB.');
-        if (
-          !file.name.trim() ||
-          file.name !== file.name.trim() ||
-          file.name.length > 180 ||
-          /[\x00-\x1f\x7f-\x9f/\\]/.test(file.name)
-        ) {
-          throw new Error(
-            'Use a filename up to 180 characters without path separators.'
-          );
-        }
+      function validateFile(file, kind = '') {
+        if (!file?.size) throw new Error('Choose a non-empty file.');
+        if (!file.name.trim() || file.name !== file.name.trim() || file.name.length > 180 ||
+            /[\x00-\x1f\x7f-\x9f/\\]/.test(file.name))
+          throw new Error('Use a filename up to 180 characters without path separators.');
         const ext = file.name.toLowerCase().split('.').pop();
-        if (photo && !['png', 'jpg', 'jpeg'].includes(ext))
-          throw new Error('Choose a JPEG or PNG damage photo.');
-        if (
-          onlyPDF ? ext !== 'pdf' : !['png', 'jpg', 'jpeg', 'pdf'].includes(ext)
-        ) {
-          throw new Error(
-            onlyPDF
-              ? 'Choose a PDF report or quote.'
-              : 'Choose a PDF, JPEG or PNG file.'
-          );
-        }
+        const image = ['png', 'jpg', 'jpeg'].includes(ext);
+        if (!image && ext !== 'pdf') throw new Error('Choose a PDF, JPEG or PNG file.');
+        if (!image && kind === 'damage_photo') throw new Error('Choose a JPEG or PNG damage photo.');
+        const limit = image && (!receipt || receipt.evidence) ? maxImageBytes : maxBytes;
+        if (file.size > limit) throw new Error('Choose a file up to ' + limit / (1024 * 1024) + ' MiB.');
+        return ext;
       }
 
       async function encodeFile(file, kind) {
+        const ext = validateFile(file, kind);
+        const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+        const signature = ext === 'pdf' ? [37,80,68,70,45] :
+                          ext === 'png' ? [137,80,78,71,13,10,26,10] : [255,216,255];
+        if (!signature.every((byte, index) => header[index] === byte))
+          throw new Error('The file contents do not match its extension. Choose the original PDF, JPEG or PNG.');
         const encoded = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result).split(',')[1]);
@@ -1058,23 +1054,19 @@
         heading(
           card,
           'How would you like to start?',
-          'An accident report can fill in details for you. You’ll check each answer before it is used.'
+          'Attach a damage photo, an accident report or a repair quote. You can also start by describing the incident.'
         );
         const drop = el('div', 'drop-zone');
         const icon = el('span', 'upload-icon', '↑');
         icon.setAttribute('aria-hidden', 'true');
         drop.append(icon);
-        fileButton(
-          drop,
-          'Import a PDF',
-          'import-file',
-          '.pdf,application/pdf',
-          (list) => importPDF(list[0]),
-          { style: 'primary' }
-        );
-        drop.append(
-          el('span', 'file-hint', 'Or drop one PDF here · up to 2 MiB')
-        );
+        const choose = el('div', 'choices');
+        fileButton(choose, 'Choose a photo or PDF', 'import-file', intakeFormats,
+          (list) => openFile(list[0]), {style:'primary'});
+        fileButton(choose, 'Take a photo', 'opening-camera', 'image/jpeg,image/png',
+          (list) => openFile(list[0]), {camera:true});
+        drop.append(choose, el('span', 'file-hint',
+          'Or drop one file here. JPEG and PNG up to 12 MiB. PDF up to 2 MiB.'));
         drop.addEventListener('dragover', (event) => {
           event.preventDefault();
           drop.classList.add('over');
@@ -1085,8 +1077,8 @@
           drop.classList.remove('over');
           if (busy) return;
           if (event.dataTransfer.files.length !== 1)
-            return showError('Drop one PDF to start your claim.');
-          importPDF(event.dataTransfer.files[0]);
+            return showError('Drop one photo or PDF to start your claim.');
+          openFile(event.dataTransfer.files[0]);
         });
         const actions = el('div', 'actions');
         actions.append(button('Tell me what happened', '', () => setStep(0)));
@@ -1101,14 +1093,22 @@
         card.append(drop, actions, examples);
       }
 
-      async function importPDF(file) {
+      async function openFile(file) {
+        setBusy(true);
+        showError('');
+        status('Preparing your file.');
         try {
-          validateFile(file, true);
-          setBusy(true);
-          status('Reading your PDF.');
-          const help = current.querySelector('.file-hint');
-          if (help) help.textContent = 'Reading ' + file.name + '…';
-          importFile = await encodeFile(file, '');
+          const doc = await encodeFile(file, '');
+          if (!/\.pdf$/i.test(doc.name)) {
+            const preview = previewImage(doc);
+            try { await preview.decode(); } catch { throw new Error('Couldn’t open the image. Choose the original JPEG or PNG.'); }
+            const exifDate = await ClaimAssistance.photoCaptureDate(file);
+            importFile = doc;
+            importResult = {image:true, exifDate};
+            setStep(importStep);
+            return;
+          }
+          importFile = doc;
           try {
             importResult = await api('import-pdf', {
               name: importFile.name,
@@ -1144,6 +1144,74 @@
         return select;
       }
 
+      function previewImage(doc, style = 'thumb') {
+        const image = el('img', style);
+        image.alt = 'Preview of ' + doc.name;
+        image.src = 'data:image/' + (/\.png$/i.test(doc.name) ? 'png' : 'jpeg') +
+          ';base64,' + doc.content_base64;
+        return image;
+      }
+
+      function previewQuoteChoice(select, panel) {
+        const doc = importFile;
+        const update = async () => {
+          panel.replaceChildren();
+          if (select.value !== 'itemized_quote') return;
+          if (!doc.assessment) {
+            setBusy(true);
+            try {
+              doc.kind = 'itemized_quote';
+              await assessQuote(doc);
+            } finally {
+              setBusy(false);
+            }
+          }
+          showQuote(panel, doc.assessment);
+        };
+        update();
+        select.addEventListener('change', update);
+      }
+
+      function drawImageImport(card) {
+        heading(card, 'Check your image', importFile.name);
+        card.append(previewImage(importFile, 'opening-image'));
+        const form = el('form');
+        const label = el('label', 'label', 'What does this image show?');
+        const select = el('select');
+        label.htmlFor = select.id = 'opening-image-kind';
+        select.required = true;
+        select.add(new Option('Choose an image type', ''));
+        for (const kind of ['damage_photo', 'incident_report', 'itemized_quote'])
+          select.add(new Option(kinds[kind], kind));
+        const panel = el('div');
+        previewQuoteChoice(select, panel);
+        form.append(label, select, panel, el('p', 'file-hint',
+          'We’ll keep the original image. You’ll enter the incident details in the next steps.'));
+        const controls = el('div', 'actions');
+        const attach = el('button', 'btn primary', 'Attach image and continue');
+        attach.type = 'submit';
+        controls.append(attach);
+        fileButton(controls, 'Replace file', 'replace-start-file', intakeFormats, (list) => openFile(list[0]));
+        controls.append(button('Cancel', 'quiet', () => {
+          importFile = importResult = null;
+          setStep(welcomeStep);
+        }));
+        form.append(controls);
+        form.addEventListener('submit', event => {
+          event.preventDefault();
+          if (!select.reportValidity()) return;
+          const doc = {...importFile, kind:select.value};
+          if (doc.kind !== 'itemized_quote') delete doc.assessment;
+          if (doc.kind === 'damage_photo') doc.assistance = {
+            exif_date:importResult.exifDate, manual_date:'', explanation:'', view:''
+          };
+          files.push(doc);
+          importFile = importResult = null;
+          setStep(nextUnanswered());
+        });
+        card.append(form);
+      }
+
       function drawImport(card) {
         heading(card, 'Check your PDF details', importFile.name);
         if (importResult.notice)
@@ -1160,21 +1228,7 @@
         form.append(typeLabel, select);
         const quotePanel = el('div');
         form.append(quotePanel);
-        if (select.value === 'itemized_quote') showQuote(quotePanel, importFile.assessment);
-        select.addEventListener('change', async () => {
-          quotePanel.replaceChildren();
-          if (select.value !== 'itemized_quote') return;
-          if (!importFile.assessment) {
-            setBusy(true);
-            try {
-              importFile.kind = 'itemized_quote';
-              await assessQuote(importFile);
-            } finally {
-              setBusy(false);
-            }
-          }
-          showQuote(quotePanel, importFile.assessment);
-        });
+        previewQuoteChoice(select, quotePanel);
         const extracted = [];
         let translation = importResult.translation;
         for (const field of fields.filter((f) => f.type !== 'choice')) {
@@ -1318,11 +1372,13 @@
         if (/\b(cover(ed|age)?|eligib\w*|approv\w*|reimburs\w*|payout|liab\w*|pay(s|ment)?|deadline|deductible|premium|fault|compensation|liable|refund|cost|costs)\b/.test(text))
           return 'The claims team assesses coverage, payment and policy terms. You can record what happened and send your documents here.';
         if (/\b(how (big|large)|how many (files?|photos?|attachments?|documents?)|file types?|size|limit|formats?|types? of files?|too large|mb|mib|jpeg|png|heic)\b/.test(text))
-          return 'Attach up to four files. Reports and quotes can be PDF, JPEG or PNG up to 2 MiB each. A JPEG or PNG damage photo can be up to 12 MiB.';
+          return receipt && !receipt.evidence
+            ? 'This receipt accepts an outstanding report or repair quote as a PDF, JPEG or PNG up to 2 MiB.'
+            : 'Attach up to four files when you start a claim. Each JPEG or PNG can be up to 12 MiB. Each PDF can be up to 2 MiB.';
         if (/\b(photos?|pictures?|camera|gallery)\b/.test(text))
           return receipt
             ? 'The receipt accepts an outstanding incident report or repair quote. Damage photos can be attached before submission.'
-            : 'Attach damage photos before submitting. At Documents, choose Take a photo or Choose from gallery. Choose a wide shot and a damage close-up. Each JPEG or PNG photo can be up to 12 MiB.';
+            : 'On the opening screen, choose Take a photo or Choose a photo or PDF. Choose whether it shows damage, an incident report or a repair quote. You can add more pictures at Documents before submitting.';
         if (/\b(save|pause|resume|draft|finish later|continue later|come back|start again)\b/.test(text))
           return receipt
             ? 'Your claim has been submitted. Keep the private follow-up link on this receipt to reopen it.'
@@ -1338,7 +1394,7 @@
         if (/\b(injur\w*|hurt)\b/.test(text))
           return 'At the injury question, choose Yes, No or I don’t know. Choose I don’t know if you are unsure.';
         if (/\b(pdf|import|extract\w*)\b/.test(text) && !/\b(later|missing|after|without|size|receipt)\b/.test(text) && !receipt)
-          return 'To import an accident report, choose Import a PDF on the opening screen. Check and correct its suggestions before continuing. You can also attach PDFs at Documents.';
+          return 'Choose a photo or PDF on the opening screen. Check any answers suggested from a PDF. For an image, choose its type, then enter the incident details yourself.';
         if (/\b(quotes?|estimates?|quotations?|reports?|documents?|docs?|paperwork|attach\w*|upload\w*|receipts?|evidence|pdf)\b/.test(text) || /\b(send|add) (it|them) later\b/.test(text)) {
           if (receipt) {
             if (receipt.evidence?.next_action)
@@ -1535,6 +1591,7 @@
       }
 
       function quoteStatus(quote) {
+        if (quote?.review_required) return 'Photo received for review';
         if (quote?.status === 'verified') return 'Verified';
         if (quote?.status === 'needs_clarification') return 'Needs clarification';
         return 'Received · awaiting verification';
@@ -1597,16 +1654,7 @@
         );
         docs.forEach((doc, index) => {
           const li = el('li', 'file');
-          if (doc.content_base64 && /\.(png|jpe?g)$/i.test(doc.name)) {
-            const image = el('img', 'thumb');
-            image.alt = 'Preview of ' + doc.name;
-            image.src =
-              'data:image/' +
-              (/\.png$/i.test(doc.name) ? 'png' : 'jpeg') +
-              ';base64,' +
-              doc.content_base64;
-            li.append(image);
-          }
+          if (doc.content_base64 && /\.(png|jpe?g)$/i.test(doc.name)) li.append(previewImage(doc));
           const info = el('div', 'file-info');
           info.append(
             el('small', '', kinds[doc.kind]),
@@ -1670,7 +1718,6 @@
               'Choose up to 4 files for the initial claim. Remove a file before choosing another.'
             );
           }
-          list.forEach((file) => validateFile(file, false, kind));
           setBusy(true);
           status(kind === 'itemized_quote' ? 'Reading the repair estimate…' : 'Preparing the attachment…');
           const docs = await Promise.all(
@@ -1733,7 +1780,7 @@
         group.append(buttons);
         if (receipt) {
           group.append(
-            el('p', 'file-hint', 'PDF, JPEG or PNG · up to 2 MiB per file')
+            el('p', 'file-hint', receipt.evidence ? 'JPEG and PNG up to 12 MiB. PDF up to 2 MiB.' : 'PDF, JPEG or PNG · up to 2 MiB per file')
           );
           card.append(group);
           return;
@@ -1769,7 +1816,7 @@
         );
         group.append(
           photoLabel, guide, viewLabel, view, photos,
-          el('p', 'file-hint', 'Reports and quotes up to 2 MiB. JPEG and PNG damage photos up to 12 MiB each.')
+          el('p', 'file-hint', 'JPEG and PNG up to 12 MiB each. PDF up to 2 MiB.')
         );
         card.append(group);
       }
@@ -2049,12 +2096,14 @@
         const panel = document.getElementById('garage-share');
         if (!panel) return;
         panel.replaceChildren();
-        panel.append(el('h3', '', 'Request an itemized quote'));
+        const quotes = receipt.evidence.quotes || [];
+        const photoUnderReview = quotes[quotes.length - 1]?.review_required;
+        panel.append(el('h3', '', photoUnderReview ? 'Garage follow-up' : 'Request an itemized quote'));
         const request = garageRequest;
         const updated = request && quoteCount() > request.quoteCount;
         const valid = request && Date.now() < request.expires;
         if (request && valid && !updated) {
-          panel.append(el('p', '', 'Share this code or link with the garage. It lets them send one PDF directly to this claim.'));
+          panel.append(el('p', '', 'Share this code or link with the garage. It lets them send one quote as a photo or PDF directly to this claim.'));
           const qr = el('img');
           qr.alt = 'Scan to send a garage quote';
           qr.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(request.qr);
@@ -2071,12 +2120,15 @@
           enlarge.setAttribute('aria-haspopup', 'dialog');
           const copy = button('Copy garage link', '', () => copyText(request.url, copy));
           panel.append(qr, enlarge, link, copy, el('p', 'file-hint',
-            'Expires ' + new Date(request.expires).toLocaleString() + '. Waiting for the garage PDF…'));
+            'Expires ' + new Date(request.expires).toLocaleString() + '. Waiting for the garage quote…'));
         } else {
           if (garageProjector.open) garageProjector.close();
           if (request) panel.append(el('p', '', updated ? 'A revised quote was received.' : 'The previous upload link expired.'));
-          panel.append(el('p', '', 'Let your garage send a revised PDF using a separate upload link.'));
-          const ask = button(issuingGarageLink ? 'Preparing link…' : 'Request breakdown from garage', 'primary', requestGarageLink);
+          panel.append(el('p', '', photoUnderReview
+            ? 'The claims team has the photo. You can request a link if the garage prepares a different estimate.'
+            : 'Let your garage send a revised quote using a separate upload link.'));
+          const label = photoUnderReview ? 'Request a revised quote (optional)' : 'Request breakdown from garage';
+          const ask = button(issuingGarageLink ? 'Preparing link…' : label, photoUnderReview ? '' : 'primary', requestGarageLink);
           ask.disabled = issuingGarageLink;
           panel.append(ask);
         }
@@ -2294,6 +2346,7 @@
             card.append(button('Open latest saved version', 'primary', resume));
         } else if (receipt) drawReceipt(card);
         else if (step === welcomeStep) drawWelcome(card);
+        else if (step === importStep && importResult?.image) drawImageImport(card);
         else if (step === importStep) drawImport(card);
         else if (step === docsStep) drawDocuments(card);
         else if (step === reviewStep) drawReview(card);

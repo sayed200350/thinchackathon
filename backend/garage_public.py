@@ -10,6 +10,7 @@ import socket
 from threading import BoundedSemaphore, Timer
 from urllib.parse import urlsplit
 
+from .intake import EVIDENCE_FILE_REQUEST_LIMIT
 from .store import RequestError
 
 
@@ -18,7 +19,7 @@ PAGES = {
     '/examples/quotes/itemized-890.pdf': 'application/pdf',
     '/examples/quotes/itemized-1800.pdf': 'application/pdf',
 }
-POST_LIMITS = {'/api/garage/status': 4 * 1024, '/api/garage/upload': 3 * 1024 * 1024}
+POST_LIMITS = {'/api/garage/status': 4 * 1024, '/api/garage/upload': EVIDENCE_FILE_REQUEST_LIMIT}
 REPLY_LIMIT = 1024 * 1024
 LAN_NETWORKS = tuple(map(ip_network, ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7')))
 ORIGIN_HELP = (
