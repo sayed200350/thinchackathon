@@ -1,0 +1,7 @@
+case_id,case_status,claim_summary,policy_active_on_incident,claim_type,repair_type,quote_eur,incident_report_present,itemized_quote_present,injury_reported,liability_disputed,duplicate_flag,evidence_conflict
+SYN-ROUTINE,open,Synthetic policy-derived example,true,motor_own_damage,standard,900,true,true,false,false,false,false
+SYN-MISSING,open,Synthetic policy-derived example,true,motor_own_damage,standard,,true,true,false,false,false,false
+SYN-INJURY,open,Synthetic policy-derived example,true,motor_own_damage,standard,900,,true,true,false,false,false
+SYN-BOUNDARY,open,Synthetic policy-derived example,true,motor_own_damage,standard,1500,true,true,false,false,false,false
+SYN-CLOSED,closed,Synthetic policy-derived example,true,motor_own_damage,standard,1400,true,true,false,false,false,false
+SYN-EV,open,Synthetic policy-derived example,true,motor_own_damage,ev_high_voltage_battery,900,true,true,false,false,false,false

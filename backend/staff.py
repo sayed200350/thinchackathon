@@ -98,6 +98,8 @@ def staff_action(store, action, body, key):
                     'next_action':result['next_action']}
     else:
         evidence = {k: v for k, v in state.items() if k != 'facts'}
+        if evidence['history']:
+            evidence['decision'] = evidence['history'][-1]['decision']
         evidence.update(next_action=_next_action(state), notes=_submitted_notes(state['notes']))
     return dict(result, evidence=evidence, documents=record['receipt']['documents'], corrections=record['corrections'],
                 incident_date=record['claimant']['incident_date'])

@@ -14,7 +14,6 @@ from eval.quality import score
 
 ROOT = Path(__file__).resolve().parents[2]
 DEVELOPMENT = ROOT / "data/taktile/labelled_development_cases.csv"
-PRACTICE = ROOT / "data/taktile/unlabelled_practice_cases.csv"
 CLAIMS = {row["case_id"]: row for row in read_claims(DEVELOPMENT)}
 BASE = CLAIMS["DEV-001"]
 
@@ -85,20 +84,33 @@ class PolicyTests(unittest.TestCase):
 
 
 class BatchAndQualityTests(unittest.TestCase):
-    def test_practice_batch_through_normal_entry_point(self):
+    def setUp(self):
+        folder = TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.synthetic_csv = Path(folder.name) / "batch.csv"
+        fields = [k for k in BASE if k != "expected_v1"]
+        with self.synthetic_csv.open("w", newline="") as output:
+            writer = csv.DictWriter(output, fieldnames=fields)
+            writer.writeheader()
+            for i in range(1, 13):
+                case = {field: BASE[field] for field in fields}
+                case.update(case_id=f"SYN-{i:03}", case_status="closed" if i in (9, 10) else "open")
+                writer.writerow(case)
+
+    def test_batch_through_normal_entry_point(self):
         with TemporaryDirectory() as folder:
             output = Path(folder) / "result.csv"
-            run = subprocess.run([sys.executable, "-m", "engine", "batch", str(PRACTICE), str(output)],
+            run = subprocess.run([sys.executable, "-m", "engine", "batch", str(self.synthetic_csv), str(output)],
                                  cwd=ROOT, text=True, capture_output=True, check=True)
             self.assertIn("await policy v2", run.stderr)
             with output.open(newline="") as file:
                 reader = csv.DictReader(file)
                 rows = list(reader)
                 self.assertEqual(tuple(reader.fieldnames), OUTPUT_COLUMNS)
-            self.assertEqual([row["case_id"] for row in rows], [row["case_id"] for row in read_claims(PRACTICE)])
+            self.assertEqual([row["case_id"] for row in rows], [row["case_id"] for row in read_claims(self.synthetic_csv)])
             self.assertEqual(len(rows), 12)
             for row in rows:
-                if row["case_id"] in {"PRA-009", "PRA-010"}:
+                if row["case_id"] in {"SYN-009", "SYN-010"}:
                     self.assertEqual(row["needs_recheck"], "False")
                     self.assertEqual(row["recommendation_v1"], row["recommendation_v2"])
                 else:
@@ -109,7 +121,7 @@ class BatchAndQualityTests(unittest.TestCase):
         with TemporaryDirectory() as folder:
             output = Path(folder) / "result.csv"
             broken = Path(folder) / "duplicate.csv"
-            write_batch(PRACTICE, output)
+            write_batch(self.synthetic_csv, output)
             previous = output.read_bytes()
             broken.write_bytes(b"\xef\xbb\xbfcase_id,case_status\nX,open\nX,closed\n")
             with self.assertRaisesRegex(ValueError, "duplicate"):
@@ -117,7 +129,7 @@ class BatchAndQualityTests(unittest.TestCase):
             self.assertEqual(output.read_bytes(), previous)
             with self.assertRaisesRegex(ValueError, "different"):
                 write_batch(output, output)
-            write_batch(PRACTICE, output)
+            write_batch(self.synthetic_csv, output)
             self.assertEqual(output.read_bytes(), previous)
 
     def test_quality_counts_both_expensive_error_types_and_rejects_unlabelled(self):
@@ -134,7 +146,7 @@ class BatchAndQualityTests(unittest.TestCase):
             self.assertEqual(report["accuracy"]["count"], 0)
             self.assertEqual(len(report["errors"]), 2)
         with self.assertRaisesRegex(ValueError, "expected_v1"):
-            score(PRACTICE)
+            score(self.synthetic_csv)
         stored = json.loads((ROOT / "eval/v1-development.json").read_text())
         self.assertEqual(score(DEVELOPMENT), stored)
 

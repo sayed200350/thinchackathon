@@ -232,7 +232,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    # Keep the workbench shortcut while keeping its policy-owner routes on their own server.
+    if "--open" in sys.argv[1:]:
+        from .workbench_server import main as run_workbench
+        return run_workbench()
+    parser = argparse.ArgumentParser(description=__doc__, epilog="Use --open to launch the local policy workbench.")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--env-file", type=Path, default=ROOT / ".env", help="server settings")
     parser.add_argument("--store", choices=("auto", "supabase", "sqlite"), default="auto",
