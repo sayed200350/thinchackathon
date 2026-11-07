@@ -13,6 +13,8 @@ from urllib.parse import unquote, urlsplit
 
 from .chat import answer
 from .intake import initialize_intakes, validate_intake
+from .intake_links import append_documents, initialize_intake_links, resolve_link, save_draft, submit_linked
+from .intake_pdf import extract_pdf
 from .store import RequestError, connect, initialize
 
 
@@ -52,16 +54,18 @@ def open_store_factory(mode, database, sources):
     path = database or ROOT / "backend/.local/reviewer.sqlite3"
     initialize(path, sources or DEFAULT_SOURCES)
     initialize_intakes(path)
+    initialize_intake_links(path)
     return "SQLite", lambda: closing(connect(path))
 
 
 class Handler(BaseHTTPRequestHandler):
-    def reply(self, status, payload=None):
+    def reply(self, status, payload=None, media_type=None):
         if isinstance(payload, bytes):
-            data, media_type = payload, "text/html"
+            data = payload
+            media_type = media_type or "text/html; charset=utf-8"
         else:
             data = b"" if payload is None else json.dumps(payload, ensure_ascii=False, allow_nan=False).encode()
-            media_type = "application/json"
+            media_type = "application/json; charset=utf-8"
         self.send_response(status)
         if self.server.ui_origin and self.headers.get("Origin") == self.server.ui_origin:
             self.send_header("Access-Control-Allow-Origin", self.server.ui_origin)
@@ -69,7 +73,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Vary", "Origin")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Type", media_type + "; charset=utf-8")
+        self.send_header("Content-Type", media_type)
+        if media_type == "application/pdf":
+            self.send_header("Content-Disposition", 'attachment; filename="sample-accident-report.pdf"')
+        self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         if data:
@@ -95,7 +102,25 @@ class Handler(BaseHTTPRequestHandler):
             return 200, self.server.intake_page
         if self.command == "GET" and parts == ["reviewer"]:
             return 200, self.server.reviewer_page
+        if self.command == "POST" and parts == ["api", "intakes", "import-pdf"]:
+            return 200, extract_pdf(self.read_json(3 * 1024 * 1024))
         with self.server.open_store() as store:
+            if self.command == "POST" and len(parts) == 3 and parts[:2] == ["api", "intakes"]:
+                action = parts[2]
+                if action not in ("save-draft", "resume", "submit", "add-documents"):
+                    raise RequestError(404, "Unknown intake endpoint.")
+                limit = 65536 if action == "resume" else INTAKE_REQUEST_LIMIT
+                body = self.read_json(limit)
+                if not isinstance(body, dict):
+                    raise RequestError(400, "Send a JSON object.")
+                token = body.get("token")
+                if action == "resume":
+                    return 200, resolve_link(store, token)
+                if action == "save-draft":
+                    return 200, save_draft(store, token, body.get("draft"), body.get("expected_revision"))
+                if action == "submit":
+                    return 200, submit_linked(store, token, body.get("payload"), body.get("expected_revision"))
+                return 200, append_documents(store, token, body.get("request_id"), body.get("documents"))
             if self.command == "POST" and parts == ["api", "intakes"]:
                 payload = validate_intake(self.read_json(INTAKE_REQUEST_LIMIT))
                 return 200, store.save_intake(payload)
@@ -123,7 +148,12 @@ class Handler(BaseHTTPRequestHandler):
             status, result = 503, {"error": "Database unavailable. Please retry."}
         self.reply(status, result)
 
-    do_GET = handle_api
+    def do_GET(self):
+        if urlsplit(self.path).path == "/sample-accident-report.pdf":
+            self.reply(200, self.server.sample_pdf, "application/pdf")
+            return
+        self.handle_api()
+
     do_POST = handle_api
 
     def do_OPTIONS(self):
@@ -146,6 +176,7 @@ def main():
         with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as server:
             server.open_store = open_store
             server.intake_page = Path(__file__).with_name("intake.html").read_bytes()
+            server.sample_pdf = (ROOT / "backend/fixtures/sample-accident-report.pdf").read_bytes()
             server.reviewer_page = Path(__file__).with_name("chat.html").read_bytes()
             server.ui_origin = args.ui_origin
             print(f"Reviewer data source: {storage}", file=sys.stderr, flush=True)

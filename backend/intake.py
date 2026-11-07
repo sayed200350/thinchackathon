@@ -130,25 +130,30 @@ def _receipt(reference, documents):
 
 def save_intake_sqlite(db, payload):
     """Save a validated submission and all bytes in one transaction."""
-    canonical = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
-    digest = hashlib.sha256(canonical).hexdigest()
     with db:
         db.execute('BEGIN IMMEDIATE')
-        existing = db.execute('SELECT reference, payload_hash FROM intake_submissions WHERE request_id = ?',
-                              (payload['request_id'],)).fetchone()
-        if existing:
-            if existing[1] != digest:
-                raise RequestError(409, 'This request ID already belongs to a different submission.')
-            return _receipt(existing[0], payload['documents'])
-        reference = 'CLM-' + str(uuid4())
-        db.execute("""INSERT INTO intake_submissions (reference, request_id, payload_hash, description,
-                   incident_date, location, policy_number, email, injury_status)
-                   VALUES (:reference, :request_id, :payload_hash, :description, :incident_date,
-                           :location, :policy_number, :email, :injury_status)""",
-                   {**payload, 'reference': reference, 'payload_hash': digest})
-        for position, doc in enumerate(payload['documents']):
-            db.execute('INSERT INTO intake_documents (reference, position, kind, name, content) VALUES (?, ?, ?, ?, ?)',
-                       (reference, position, doc['kind'], doc['name'], base64.b64decode(doc['content_base64'])))
+        return write_intake_sqlite(db, payload)
+
+
+def write_intake_sqlite(db, payload):
+    """Write or replay a validated intake inside the caller's transaction."""
+    canonical = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
+    digest = hashlib.sha256(canonical).hexdigest()
+    existing = db.execute('SELECT reference, payload_hash FROM intake_submissions WHERE request_id = ?',
+                          (payload['request_id'],)).fetchone()
+    if existing:
+        if existing[1] != digest:
+            raise RequestError(409, 'This request ID already belongs to a different submission.')
+        return _receipt(existing[0], payload['documents'])
+    reference = 'CLM-' + str(uuid4())
+    db.execute("""INSERT INTO intake_submissions (reference, request_id, payload_hash, description,
+               incident_date, location, policy_number, email, injury_status)
+               VALUES (:reference, :request_id, :payload_hash, :description, :incident_date,
+                       :location, :policy_number, :email, :injury_status)""",
+               {**payload, 'reference': reference, 'payload_hash': digest})
+    for position, doc in enumerate(payload['documents']):
+        db.execute('INSERT INTO intake_documents (reference, position, kind, name, content) VALUES (?, ?, ?, ?, ?)',
+                   (reference, position, doc['kind'], doc['name'], base64.b64decode(doc['content_base64'])))
     return _receipt(reference, payload['documents'])
 
 

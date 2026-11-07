@@ -25,6 +25,8 @@ The browser roles can read the fictional demo data and append reviewer actions. 
 
 For claimant intake, run [claim_intake.sql](claim_intake.sql). It creates two private tables and a submit-only function for the app. Run the [intake smoke test](../../backend/supabase_intake_smoke.sql) to verify attachment bytes, private access, retry handling and rollback. The backend stores original document bytes alongside the submission.
 
+Apply [intake_links.sql](intake_links.sql) after the intake schema to enable saved drafts and outstanding uploads. Run the [private-link smoke test](../../backend/supabase_intake_links_smoke.sql). A draft is associated with the hash of a claimant-generated secret. On submission the draft is cleared, and the link opens receipt information. Existing claim references and earlier submissions do not grant draft access.
+
 1. Run [schema.sql](schema.sql), then [reviewer_corrections.sql](reviewer_corrections.sql) in the Supabase SQL Editor. The second script preserves existing audit entries, assigns revisions, and installs the atomic correction function.
 2. From the repo root, run `python3 -m backend.supabase_seed > /tmp/policy-replay-seed.sql`. Run its contents in the SQL Editor. The seed inserts 26 official fictional claims, their 26 v1 engine decisions and the 14 supplied development labels. It checks existing snapshots and rolls back on conflicting data.
 3. Run the [fixture and grants test](../../backend/supabase_smoke.sql) and [shared correction test](../../backend/supabase_correction_smoke.sql) in the SQL Editor. The latter inserts a temporary claim, exercises both write paths, checks idempotent retries and stale revisions, then rolls back its test records.
