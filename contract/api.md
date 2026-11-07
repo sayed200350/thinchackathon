@@ -75,6 +75,18 @@ Set top-level `"evidence_version": 1` on **save-draft, resume, submit and add-do
 - The service assesses uploaded quote bytes on submission and follow-up. `POST /api/evidence/quote` previews the same result. It returns `name`, `status` (`verified` or `needs_clarification`), `amount_eur`, `itemized`, `page`, `reason`, `total_text`, `lines` (description, amount and page) and `garage_request`. Absent evidence can produce nulls. A verified result means recognized priced work and any listed tax reconcile to a single printed euro total.
 - A submitted receipt’s `evidence.quotes` contains each version’s summary, position and filing guidance. `evidence.next_action` has `owner` (`claimant`, `garage` or `claims_team`) and `message`. Only an explicit fictional demo also includes `demo_case` and `decision` in this receipt. Use the staff endpoints for original bytes, private notes, and the full history.
 
+### Garage quote handoff
+
+| Endpoint | Request | Successful response |
+| --- | --- | --- |
+| `POST /api/intakes/garage-link` | `{"token":"<claimant token>"}` for a submitted evidence-enabled claim | `url`, locally generated `qr_svg`, and UTC `expires_at` |
+| `POST /api/garage/status` | `{"token":"<garage token>"}` | `{"status":"open","demo":false}`, or just `status` with `received` or `closed` |
+| `POST /api/garage/upload` | `token` and one `document` with `kind:"itemized_quote"`, a PDF `name`, and `content_base64` | `{"status":"received"}` |
+
+The garage token travels in the fragment of `/garage#upload=…` and in the body of those two garage operations. An open fictional DEV-003 link includes `demo:true`. The phone receives no claim reference, contact data, previous filenames, policy result, or receipt access. Use a single PDF of up to 2 MiB. A malformed or expired capability returns 403. A stale revision or a different second file returns 409. Retrying the original file on a used link returns the same confirmation. Reminting a link for a given quote version still grants one upload in total. The receipt and staff history mark quotes that arrived through this route with `source:"garage"`.
+
+Configure `GARAGE_PUBLIC_ORIGIN` or `--garage-public-origin` on the claimant API to enable issuance. Use the URL of the restricted garage gateway. An absent or unusable sharing address returns 503. The backend uses a separate persisted `claim_garage_key` in its existing private key directory. All replicas must use the same server-only `CLAIM_GARAGE_KEY` or persisted key. Rotating it invalidates existing links. The current Thinc evidence schema supports this operation.
+
 ### Staff evidence and credentials
 
 In **Open submitted claim**, staff enter the public claim reference and their reviewer key. Send both in JSON over HTTPS when hosted. The staff response includes `reference`, `incident_date`, the filenames in `documents`, and `evidence` with the latest decision, append-only quote versions, decision history, and both sets of notes. `history[].decision.matched_rule` gives the clause for that version. `quotes[].position` identifies its original file. File positions are zero-based in all HTTP responses. Missing or incorrect staff credentials return 403. A reference without an enhanced record returns 404.

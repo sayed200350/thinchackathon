@@ -579,6 +579,20 @@
       .link-panel p {
         margin: 4px 0 9px;
       }
+      .garage-share img {
+        display:block; width:min(320px, 100%); aspect-ratio:1; margin:12px 0;
+        border:1px solid var(--line); background:white;
+      }
+      .garage-share input { margin:6px 0; }
+      #garage-projector {
+        width:min(94vw, 760px); max-height:96vh; padding:clamp(12px, 3vw, 28px);
+        border:1px solid var(--line); border-radius:12px; color:var(--ink);
+      }
+      #garage-projector::backdrop { background:rgba(11, 24, 17, .78); }
+      .projector-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+      .projector-head h2 { margin:0; }
+      #projected-code { display:block; width:min(100%, 69vh); aspect-ratio:1; margin:8px auto; }
+      #projected-garage-link { display:block; text-align:center; color:var(--accent); }
       .link-panel input {
         font-size: 13px;
       }
@@ -611,6 +625,14 @@
         <p id="announce" class="sr" role="status"></p>
       </section>
     </main>
+    <dialog id="garage-projector" aria-labelledby="projector-title">
+      <div class="projector-head">
+        <h2 id="projector-title">Scan to send a garage quote</h2>
+        <form method="dialog"><button class="btn" autofocus>Close</button></form>
+      </div>
+      <img id="projected-code" alt="Garage upload QR code">
+      <a id="projected-garage-link" target="_blank" rel="noreferrer noopener">Open garage upload</a>
+    </dialog>
     <dialog id="filing-help" aria-labelledby="help-title">
       <h2 id="help-title">Ask about filing your claim</h2>
       <div id="help-exchange" class="help-exchange" hidden>
@@ -716,6 +738,9 @@
       let busy = false;
       let saveNotice = false;
       let conflict = false;
+      let garageRequest = null;
+      let issuingGarageLink = false;
+      let checkingReceipt = false;
 
       function el(tag, cls, text) {
         const node = document.createElement(tag);
@@ -1539,6 +1564,7 @@
         section.append(el('strong', '', version + quoteStatus(quote)), el('p', '', quote.reason));
         const citation = quote.name + (quote.page ? ' · page ' + quote.page : '');
         section.append(el('small', 'citation', citation));
+        if (quote.source === 'garage') section.append(el('small', 'citation', 'Received from garage'));
         if (quote.status === 'verified' && typeof quote.amount_eur === 'number') {
           const total = new Intl.NumberFormat('en-IE', {style: 'currency', currency: 'EUR'}).format(quote.amount_eur);
           section.append(el('p', '', 'Itemized total · ' + total));
@@ -1933,6 +1959,42 @@
           copyText(receipt.reference, copy)
         );
         card.append(copy);
+        const summary = el('div');
+        summary.id = 'receipt-evidence';
+        receiptSummary(summary);
+        card.append(summary);
+        const evidence = receipt.evidence;
+        if (evidence) {
+          const share = el('section', 'link-panel garage-share');
+          share.id = 'garage-share';
+          share.setAttribute('aria-label', 'Garage request');
+          card.append(share);
+          garagePanel();
+        }
+        linkPanel(card, 'Private follow-up link');
+        if (receipt.missing_documents.length || evidence) {
+          const details = el('details', 'follow-up');
+          details.open = files.length > 0;
+          details.append(el('summary', '', 'Add documents to this claim'));
+          fileList(details, files, true);
+          uploadControls(details, [...receipt.documents, ...files]);
+          if (files.length) {
+            const send = button('Send additional documents', 'primary', () =>
+              sendOperation('add-documents', {
+                token,
+                request_id: uid(),
+                ...(evidence ? {evidence_version: 1, notes: attachmentNotes(files)} : {}),
+                documents: files.map(attachmentBody)
+              })
+            );
+            details.append(send);
+          }
+          card.append(details);
+        }
+        card.append(button('Report another claim', 'quiet', fresh));
+      }
+
+      function receiptSummary(card) {
         card.append(
           el('h3', '', 'Files received (' + receipt.document_count + ')')
         );
@@ -1967,28 +2029,124 @@
               : 'All requested paperwork has been received.'
           )
         );
-        linkPanel(card, 'Private follow-up link');
-        if (receipt.missing_documents.length || evidence) {
-          const details = el('details', 'follow-up');
-          details.open = files.length > 0;
-          details.append(el('summary', '', 'Add documents to this claim'));
-          fileList(details, files, true);
-          uploadControls(details, [...receipt.documents, ...files]);
-          if (files.length) {
-            const send = button('Send additional documents', 'primary', () =>
-              sendOperation('add-documents', {
-                token,
-                request_id: uid(),
-                ...(evidence ? {evidence_version: 1, notes: attachmentNotes(files)} : {}),
-                documents: files.map(attachmentBody)
-              })
-            );
-            details.append(send);
-          }
-          card.append(details);
-        }
-        card.append(button('Report another claim', 'quiet', fresh));
       }
+
+      function quoteCount() {
+        return receipt?.evidence?.quotes?.length || 0;
+      }
+
+      const garageProjector = document.getElementById('garage-projector');
+      const projectedCode = document.getElementById('projected-code');
+      const projectedLink = document.getElementById('projected-garage-link');
+      garageProjector.addEventListener('close', () => {
+        projectedCode.removeAttribute('src');
+        projectedLink.removeAttribute('href');
+        if (document.activeElement === document.body)
+          document.querySelector('#garage-share button')?.focus();
+      });
+
+      function garagePanel() {
+        const panel = document.getElementById('garage-share');
+        if (!panel) return;
+        panel.replaceChildren();
+        panel.append(el('h3', '', 'Request an itemized quote'));
+        const request = garageRequest;
+        const updated = request && quoteCount() > request.quoteCount;
+        const valid = request && Date.now() < request.expires;
+        if (request && valid && !updated) {
+          panel.append(el('p', '', 'Share this code or link with the garage. It lets them send one PDF directly to this claim.'));
+          const qr = el('img');
+          qr.alt = 'Scan to send a garage quote';
+          qr.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(request.qr);
+          const link = el('input');
+          link.readOnly = true;
+          link.value = request.url;
+          link.setAttribute('aria-label', 'Garage upload link');
+          link.addEventListener('focus', () => link.select());
+          const enlarge = button('Enlarge QR code', '', () => {
+            projectedCode.src = qr.src;
+            projectedLink.href = link.value;
+            garageProjector.showModal();
+          });
+          enlarge.setAttribute('aria-haspopup', 'dialog');
+          const copy = button('Copy garage link', '', () => copyText(request.url, copy));
+          panel.append(qr, enlarge, link, copy, el('p', 'file-hint',
+            'Expires ' + new Date(request.expires).toLocaleString() + '. Waiting for the garage PDF…'));
+        } else {
+          if (garageProjector.open) garageProjector.close();
+          if (request) panel.append(el('p', '', updated ? 'A revised quote was received.' : 'The previous upload link expired.'));
+          panel.append(el('p', '', 'Let your garage send a revised PDF using a separate upload link.'));
+          const ask = button(issuingGarageLink ? 'Preparing link…' : 'Request breakdown from garage', 'primary', requestGarageLink);
+          ask.disabled = issuingGarageLink;
+          panel.append(ask);
+        }
+        panel.append(button('Refresh receipt', 'quiet', () => refreshReceipt(true)));
+      }
+
+      async function requestGarageLink() {
+        if (issuingGarageLink || !receipt?.evidence) return;
+        const original = receipt.reference;
+        const versions = quoteCount();
+        issuingGarageLink = true;
+        garagePanel();
+        showError('');
+        try {
+          const data = await api('garage-link', {token});
+          if (receipt?.reference !== original) return;
+          const url = new URL(data.url, location.origin);
+          const expires = Date.parse(data.expires_at);
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+              url.pathname !== '/garage' || url.search || !/^#upload=[^&]+$/.test(url.hash) ||
+              typeof data.qr_svg !== 'string' || !data.qr_svg.includes('<svg') || !Number.isFinite(expires))
+            throw new Error('Could not prepare the garage upload link.');
+          garageRequest = {url:url.href, qr:data.qr_svg, expires, quoteCount:versions};
+          status('Garage upload link ready.');
+        } catch (error) {
+          if (receipt?.reference === original) showError(error.message);
+        } finally {
+          issuingGarageLink = false;
+          garagePanel();
+        }
+      }
+
+      async function refreshReceipt(manual = false) {
+        if (!receipt?.evidence || checkingReceipt || busy || pending || conflict) return;
+        const initial = receipt;
+        checkingReceipt = true;
+        try {
+          const next = await api('resume', {token, evidence_version:1});
+          if (receipt !== initial || busy || pending || conflict) return;
+          if (next.status !== 'submitted' || next.reference !== initial.reference ||
+              !next.evidence || !Array.isArray(next.documents) || !Array.isArray(next.missing_documents) ||
+              next.document_count !== next.documents.length)
+            throw new Error('Could not confirm the latest receipt.');
+          if (next.document_count > initial.document_count) {
+            receipt = next;
+            const summary = document.getElementById('receipt-evidence');
+            if (summary) { summary.replaceChildren(); receiptSummary(summary); }
+            garagePanel();
+            status('New paperwork received.');
+          } else if (manual) status('The receipt is up to date.');
+          if (manual) showError('');
+        } catch {
+          if (manual && receipt === initial) showError('Could not refresh the receipt. Try again.');
+        } finally {
+          checkingReceipt = false;
+        }
+      }
+
+      function checkWaitingReceipt() {
+        if (document.hidden || !receipt?.evidence) return;
+        if (garageRequest && !garageRequest.expired && Date.now() >= garageRequest.expires) {
+          garageRequest.expired = true;
+          garagePanel();
+        }
+        if ((garageRequest && !garageRequest.expired && quoteCount() <= garageRequest.quoteCount) ||
+            receipt.evidence.next_action?.owner === 'garage') refreshReceipt();
+      }
+
+      window.setInterval(checkWaitingReceipt, 5000);
+      document.addEventListener('visibilitychange', checkWaitingReceipt);
 
       async function copyText(text, action) {
         try {
@@ -2030,6 +2188,7 @@
       }
 
       function fresh() {
+        garageRequest = null;
         history.replaceState(null, '', location.pathname);
         demoCase = null;
         token = '';

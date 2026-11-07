@@ -408,6 +408,7 @@
         const item = make('article');
         item.setAttribute('aria-label', 'Quote version ' + version);
         item.append(make('h3', 'Version ' + version + ' · ' + assessment.name));
+        if (assessment.source === 'garage') item.append(make('p', 'Received from garage', 'small'));
         if (decision) decisionCard(item, decision);
         if (previous) {
           item.append(

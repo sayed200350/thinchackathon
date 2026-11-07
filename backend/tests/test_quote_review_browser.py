@@ -63,7 +63,8 @@ class EvidenceReplayUITests(unittest.TestCase):
         def fake_result(route):
             requests.append(route.request.post_data_json)
             data = {'reference':'CLM-TEST','incident_date':'2025-10-11','documents':[{'kind':'damage_photo','name':'garage.png'}],
-                    'evidence':{'quotes':[], 'notes':{
+                    'evidence':{'quotes':[{'version':1,'position':1,'name':'estimate.pdf','source':'garage',
+                                           'status':'verified','reason':'Two repair items match the total.'}], 'notes':{
                         'photos':[{'position':0,'view':'wide','exif_date':'2025-10-12','manual_date':'2025-10-13','explanation':'Taken after pickup.'}],
                         'translations':[{'position':0,'original':'Das Auto war geparkt.','english':'The car was parked.','page':1,
                                          'source':'Local phrase','confirmed':True}]}, 'history':[],
@@ -78,6 +79,7 @@ class EvidenceReplayUITests(unittest.TestCase):
         self.page.get_by_role('button',name='Open claim').click()
         expect(self.page.get_by_text('garage.png',exact=True)).to_be_visible()
         expect(self.page.get_by_text('Send the quote.',exact=True)).to_be_visible()
+        expect(self.page.get_by_role('article', name='Quote version 1').get_by_text('Received from garage', exact=True)).to_be_visible()
         for text in ['Taken after pickup.', 'Capture date in file: 2025-10-12', 'Date given by claimant: 2025-10-13',
                      'Das Auto war geparkt.','The car was parked.','Confirmed by claimant']:
             expect(self.page.get_by_text(text,exact=True)).to_be_visible()
