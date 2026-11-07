@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="referrer" content="no-referrer">
+  <title>Send a garage quote · Retakt</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/retakt.css">
+  <style>
+    html { -webkit-tap-highlight-color: transparent; }
+    body { overflow-x: hidden; }
+    .topbar { top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); }
+    main { max-width: 640px; margin: 0 auto; padding: calc(84px + env(safe-area-inset-top)) clamp(16px, 4vw, 24px) max(40px, env(safe-area-inset-bottom)); }
+    .lead { padding-block: clamp(12px, 5vh, 48px) 20px; }
+    .lead .eyebrow { display: block; margin-bottom: 10px; }
+    h1 { font-size: clamp(32px, 7vw, 48px); margin: 0; overflow-wrap: anywhere; }
+    h1:focus { outline: none; }
+    #intro { margin: 12px 0 0; color: var(--muted-foreground); font-size: 16px; max-width: 52ch; }
+    #intro:empty { display: none; }
+
+    .panel { padding: clamp(14px, 4vw, 22px); border-radius: 12px; }
+    form { display: grid; gap: 14px; }
+    #pickers { display: grid; gap: 12px; }
+    .or { display: flex; align-items: center; gap: 12px; font: 500 11px var(--font-mono); text-transform: uppercase; color: var(--muted-foreground); }
+    .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    label[for=file] { font: 500 12px var(--font-mono); text-transform: uppercase; color: var(--muted-foreground); }
+    label[for=file] strong { font-weight: 500; }
+    input[type=file] { display: block; width: 100%; min-width: 0; padding: 8px; font-size: 16px; color: var(--muted-foreground); background: var(--popover); border: 1px dashed var(--input); border-radius: 4px; min-height: 52px; }
+    input[type=file]::file-selector-button { font: 500 14px var(--font-sans); min-height: 40px; padding: 0 14px; margin-right: 12px; color: var(--foreground); background: transparent; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+    input[type=file]::file-selector-button:hover { background: var(--muted); border-color: var(--decision-standard-line); }
+    .hint { color: var(--muted-foreground); font-size: 12.5px; line-height: 1.5; }
+    #limit { display: block; font-family: var(--font-mono); font-size: 12px; }
+    p.hint { margin: 0; }
+    #selection { margin: 0; font: 500 13px var(--font-mono); color: var(--foreground); overflow-wrap: anywhere; }
+    #selection:empty { display: none; }
+
+    button { min-height: 44px; padding: 0 16px; font-size: 15px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--foreground); font-weight: 500; }
+    button:hover:enabled { background: var(--muted); border-color: var(--decision-standard-line); }
+    #take { width: 100%; }
+    button[type=submit] { width: 100%; color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); }
+    button[type=submit]:hover:enabled { background: oklch(0.9 0 0); border-color: oklch(0.9 0 0); }
+    #retry { margin-top: 20px; color: var(--primary-foreground); background: var(--primary); border-color: var(--primary); min-width: 140px; }
+    #retry:hover:enabled { background: oklch(0.9 0 0); }
+
+    #review-file { display: grid; gap: 12px; }
+    #photo-preview { display: grid; gap: 8px; }
+    #preview { display: block; width: 100%; max-height: 46vh; object-fit: contain; background: var(--popover); border: 1px solid var(--border); border-radius: 8px; }
+    .file-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .file-actions button { flex: 1 1 100px; }
+
+    details { border-top: 1px solid var(--border); padding-top: 12px; }
+    summary { cursor: pointer; min-height: 40px; display: flex; align-items: center; font: 500 12px var(--font-mono); text-transform: uppercase; color: var(--muted-foreground); }
+    .samples { display: grid; gap: 10px; margin: 6px 0 2px; }
+    .sample-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 14px; }
+    .sample-row button { flex: 1 1 160px; }
+    .sample-row a { font: 12px var(--font-mono); color: var(--muted-foreground); min-height: 40px; display: inline-flex; align-items: center; }
+    .sample-row a:hover { color: var(--foreground); }
+
+    .error { margin: 0; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--decision-reject-line); background: var(--decision-reject-soft); color: var(--destructive); font-size: 14px; overflow-wrap: anywhere; }
+    @media (max-width: 580px) {
+      .topbar .eyebrow { display: none; }
+      input, button { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="29.245 29.245 80 80" fill="currentColor" aria-hidden="true"><path d="M29.245 29.245h16.667v80H29.245zM49.245 29.245h8.334v80h-8.334zM62.434 29.245h5.145v80h-5.145zM79.245 29.245h3.333v80h-3.333zM105.912 29.245h3.333v80h-3.333z"/></svg>
+      Retakt <span class="eyebrow">Garage upload</span>
+    </div>
+  </header>
+  <main>
+    <div class="lead">
+      <span class="eyebrow">Garage quote</span>
+      <h1 id="title" tabindex="-1">Opening upload link…</h1>
+      <p id="intro" aria-live="polite"></p>
+    </div>
+    <section class="panel card" id="upload-panel" hidden>
+      <form id="upload-form">
+        <div id="pickers">
+          <button type="button" id="take" aria-describedby="limit">Take a photo</button>
+          <div class="or" aria-hidden="true">or</div>
+          <label for="file"><strong>Choose a file or gallery photo</strong></label>
+          <input type="file" id="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" aria-describedby="limit">
+        </div>
+        <input type="file" id="camera" accept="image/jpeg,image/png" capture="environment" hidden>
+        <span class="hint" id="limit">JPEG or PNG up to 12 MiB. PDF up to 2 MiB.</span>
+        <p class="hint" aria-live="polite" id="selection"></p>
+        <div id="review-file" hidden>
+          <div id="photo-preview" hidden>
+            <img id="preview" alt="Quote photo preview">
+            <p class="hint">Check that the repair work, prices and total are easy to read.</p>
+          </div>
+          <div class="file-actions">
+            <button type="button" id="retake">Retake photo</button>
+            <button type="button" id="replace">Replace file</button>
+            <button type="button" id="remove">Remove file</button>
+          </div>
+        </div>
+        <div id="examples" hidden>
+          <details open>
+            <summary>Sample quotes for this demo</summary>
+            <div class="samples">
+              <div class="sample-row">
+                <button type="button" data-example="itemized-890.pdf">Use €890 example</button>
+                <a href="/examples/quotes/itemized-890.pdf" aria-label="€890 itemized PDF" download="itemized-890.pdf">Download PDF</a>
+              </div>
+              <div class="sample-row">
+                <button type="button" data-example="itemized-1800.pdf">Use €1,800 example</button>
+                <a href="/examples/quotes/itemized-1800.pdf" aria-label="€1,800 itemized PDF" download="itemized-1800.pdf">Download PDF</a>
+              </div>
+            </div>
+          </details>
+        </div>
+        <p class="error" role="alert" id="error" hidden></p>
+        <button type="submit" id="send" disabled>Send quote</button>
+      </form>
+    </section>
+    <button id="retry" type="button" hidden>Try again</button>
+  </main>
+  <script>
+    'use strict';
+    const get = id => document.getElementById(id);
+    const token = new URLSearchParams(location.hash.slice(1)).get('upload');
+    const picker = get('file');
+    const camera = get('camera');
+    const send = get('send');
+    let selected = null;
+    let photoUrl = '';
+    let sending = false;
+    let choice = 0;
+
+    async function post(action, body) {
+      const result = await fetch('/api/garage/' + action, {
+        method:'POST', cache:'no-store', referrerPolicy:'no-referrer',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+      });
+      if (!result.ok) {
+        const problem = new Error('The garage upload service could not complete this request.');
+        problem.status = result.status;
+        throw problem;
+      }
+      return result.json();
+    }
+
+    function view(title, message, open = false) {
+      get('title').textContent = title;
+      get('intro').textContent = message;
+      get('upload-panel').hidden = !open;
+      get('retry').hidden = true;
+      if (!open) { beginChoice(); picker.value = camera.value = ''; }
+    }
+
+    function unavailable() {
+      view('Upload link unavailable', 'Ask the person who sent this link for a new garage upload request.');
+    }
+
+    function received() {
+      view('Quote received', 'Your quote has been added to the claim. You can close this page.');
+    }
+
+    async function open() {
+      if (!token) return unavailable();
+      get('retry').hidden = true;
+      try {
+        const result = await post('status', {token});
+        if (result.status === 'received') return received();
+        if (result.status === 'closed') return unavailable();
+        if (result.status !== 'open') throw new Error('Unexpected status');
+        view('Send an itemized quote', 'Include the repair work, each price and the final total. For a photo, fit all four corners of the page in the frame.', true);
+        get('examples').hidden = result.demo !== true;
+      } catch (error) {
+        if ([400,403,404,410].includes(error.status)) return unavailable();
+        view('Couldn’t open the upload', 'Check your connection, then try again.');
+        get('retry').hidden = false;
+      }
+    }
+
+    function showError(message) {
+      get('error').textContent = message;
+      get('error').hidden = !message;
+    }
+
+    function beginChoice(message = '') {
+      selected = null;
+      photoUrl = '';
+      get('preview').removeAttribute('src');
+      get('review-file').hidden = get('photo-preview').hidden = true;
+      get('pickers').hidden = false;
+      send.disabled = true;
+      showError('');
+      get('selection').textContent = message;
+      return ++choice;
+    }
+
+    async function stage(file, current) {
+      if (!file || current !== choice) return;
+      const ext = file.name.split('.').pop().toLowerCase();
+      const type = {pdf:'application/pdf', jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png'}[ext];
+      if (!file.name.includes('.') || typeof type !== 'string')
+        return showError('Choose a JPEG or PNG photo, or a PDF.');
+      const isPhoto = type !== 'application/pdf';
+      if (file.size > (isPhoto ? 12 : 2) * 1024 * 1024)
+        return showError(isPhoto ? 'Choose a photo up to 12 MiB.' : 'Choose a PDF up to 2 MiB.');
+      try {
+        const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+        const signature = {
+          'application/pdf':[37,80,68,70,45],
+          'image/jpeg':[255,216,255],
+          'image/png':[137,80,78,71,13,10,26,10]
+        }[type];
+        if (current !== choice) return;
+        if (!signature.every((byte, index) => byte === header[index]))
+          return showError('This file does not match its format. Choose the original photo or PDF.');
+        if (isPhoto) {
+          get('selection').textContent = 'Opening photo preview…';
+          // Supply the verified MIME type even if the phone left it blank. Slicing
+          // a Blob with a new type preserves every byte of the camera original.
+          const url = await readDataUrl(file.slice(0, file.size, type));
+          const probe = new Image();
+          probe.src = url;
+          await probe.decode();
+          if (current !== choice) return;
+          photoUrl = url;
+          get('preview').src = url;
+        }
+        selected = file;
+        send.disabled = false;
+        get('selection').textContent = 'Ready to send · ' + file.name;
+        get('photo-preview').hidden = get('retake').hidden = !isPhoto;
+        get('review-file').hidden = false;
+        get('pickers').hidden = true;
+      } catch {
+        if (current === choice) {
+          get('selection').textContent = '';
+          showError('Couldn’t read that file. Choose the original photo or PDF again.');
+        }
+      }
+    }
+
+    for (const input of [picker, camera]) {
+      input.addEventListener('change', () => {
+        if (input.files[0]) stage(input.files[0], beginChoice());
+      });
+    }
+    get('take').addEventListener('click', () => camera.click());
+    get('retake').addEventListener('click', () => camera.click());
+    get('replace').addEventListener('click', () => picker.click());
+    get('remove').addEventListener('click', () => {
+      picker.value = camera.value = '';
+      beginChoice();
+      get('take').focus();
+    });
+
+    for (const example of document.querySelectorAll('[data-example]')) {
+      example.addEventListener('click', async () => {
+        if (sending || get('examples').hidden) return;
+        const current = beginChoice('Opening example PDF…');
+        const name = example.dataset.example;
+        picker.value = '';
+        try {
+          const response = await fetch('/examples/quotes/' + name, {credentials:'omit', referrerPolicy:'no-referrer'});
+          if (!response.ok) throw new Error('Example unavailable');
+          const file = new File([await response.blob()], name, {type:'application/pdf'});
+          if (current !== choice) return;
+          // Mirror the staged example in browsers with a writable native file picker.
+          try {
+            const files = new DataTransfer();
+            files.items.add(file);
+            picker.files = files.files;
+          } catch {
+            // The selected filename below also works on older mobile browsers.
+          }
+          await stage(file, current);
+        } catch {
+          if (current === choice) {
+            get('selection').textContent = '';
+            showError('Couldn’t open the example. Try again or choose a PDF from your device.');
+          }
+        }
+      });
+    }
+
+    function readDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    get('upload-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!selected || sending) return;
+      sending = true;
+      const controls = document.querySelectorAll('#upload-form button, #upload-form input');
+      for (const control of controls) control.disabled = true;
+      send.textContent = 'Sending…';
+      showError('');
+      try {
+        const dataUrl = photoUrl || await readDataUrl(selected);
+        const attachment = {kind:'itemized_quote', name:selected.name, content_base64:dataUrl.slice(dataUrl.indexOf(',') + 1)};
+        const result = await post('upload', {token, document:attachment});
+        if (result.status !== 'received') throw new Error('Unexpected status');
+        received();
+      } catch (error) {
+        if ([403,404,409,410].includes(error.status)) {
+          await open();
+        }
+        if (!get('upload-panel').hidden)
+          showError('The upload could not be confirmed. Check your connection and try sending the same file again.');
+      } finally {
+        sending = false;
+        for (const control of controls) control.disabled = false;
+        send.disabled = !selected;
+        send.textContent = 'Send quote';
+      }
+    });
+    get('retry').addEventListener('click', open);
+    window.addEventListener('hashchange', () => location.reload());
+    open();
+  </script>
+</body>
+</html>

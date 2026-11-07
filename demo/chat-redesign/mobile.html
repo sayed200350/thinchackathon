@@ -25,6 +25,11 @@
     .stage { position: relative; z-index: 1; }
     .stage-inner { display: grid; justify-items: center; gap: 18px; }
     .caption { text-align: center; }
+    .screens { display: flex; gap: 6px; padding: 4px; border-radius: 999px; background: oklch(0.24 0 0 / .35); border: 1px solid oklch(0.3 0 0); backdrop-filter: blur(4px); }
+    .screens button { border: 0; background: transparent; color: var(--muted); font: 500 12px var(--font-mono); text-transform: uppercase; letter-spacing: .03em; padding: 7px 12px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+    .screens button:hover { color: var(--fg); }
+    .screens button[aria-pressed="true"] { background: oklch(0.985 0 0); color: oklch(0.13 0 0); }
+    .screens button:focus-visible { outline: 2px solid oklch(0.985 0 0 / .7); outline-offset: 2px; }
     .eyebrow { font: 500 12px var(--font-mono); text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
     .caption h1 { margin: 4px 0 0; font-size: 22px; font-weight: 500; line-height: 1.1; text-shadow: 0 0 18px oklch(1 0 0 / .12); }
 
@@ -58,7 +63,13 @@
   <div class="stage"><div class="stage-inner">
     <div class="caption">
       <span class="eyebrow">Mobile app preview</span>
-      <h1>Retakt Reviewer</h1>
+      <h1>Retakt</h1>
+    </div>
+    <div class="screens" id="screens" role="group" aria-label="Choose a screen">
+      <button type="button" data-src="/" aria-pressed="true">Report claim</button>
+      <button type="button" data-src="/garage" aria-pressed="false">Garage</button>
+      <button type="button" data-src="/reviewer" aria-pressed="false">Reviewer chat</button>
+      <button type="button" data-src="/reviewer/evidence" aria-pressed="false">Evidence</button>
     </div>
     <div class="fit" id="fit">
       <div class="phone">
@@ -72,7 +83,7 @@
               <svg viewBox="0 0 27 13" style="height:13px"><rect x=".5" y=".5" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="19" height="9" rx="2.2"/><rect x="24" y="4.2" width="2" height="4.6" rx="1" opacity=".45"/></svg>
             </div>
           </div>
-          <iframe src="/reviewer" title="Retakt reviewer chat" allow="clipboard-write"></iframe>
+          <iframe id="frame" src="/" title="Retakt reviewer chat" allow="clipboard-write"></iframe>
           <div class="home"><span></span></div>
         </div>
       </div>
@@ -124,12 +135,12 @@
             if (v < .06) continue;
             const k = Math.min(RAMP.length - 1, Math.floor(v * (RAMP.length - 1)));
             if (!k) continue;
-            cx.fillStyle = `rgba(255,255,255,${Math.min(.26, .025 + v * .16).toFixed(3)})`;
+            cx.fillStyle = `rgba(255,255,255,${Math.min(.38, .035 + v * .24).toFixed(3)})`;
             cx.fillText(RAMP[k], i * CW, j * CH);
           }
         }
         // Policy-Woerter treiben langsam durchs Bild
-        cx.fillStyle = 'rgba(255,255,255,.1)';
+        cx.fillStyle = 'rgba(255,255,255,.15)';
         for (const w of rows_words) {
           const len = w.word.length + 6, pos = ((w.off + w.dir * t * w.speed) % (cols + len) + cols + len) % (cols + len) - len;
           cx.fillText(w.word, Math.round(pos) * CW, w.row * CH);
@@ -140,13 +151,23 @@
 
     const fit = document.getElementById('fit');
     function resize() {
-      const s = Math.min(1, (window.innerHeight - 110) / 844, (window.innerWidth - 40) / 390);
+      const s = Math.min(1, (window.innerHeight - 150) / 844, (window.innerWidth - 40) / 390);
       fit.style.setProperty('--s', Math.max(0.4, s).toFixed(3));
     }
     function tick() {
       const d = new Date();
       document.getElementById('clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
     }
+    /* Bildschirm wechseln (merkt sich die Auswahl im URL-Hash, z. B. #/reviewer) */
+    const frame = document.getElementById('frame'), screens = document.querySelectorAll('#screens button');
+    function show(src) {
+      const target = [...screens].find(b => b.dataset.src === src) || screens[0];
+      screens.forEach(b => b.setAttribute('aria-pressed', String(b === target)));
+      if (frame.getAttribute('src') !== target.dataset.src) frame.setAttribute('src', target.dataset.src);
+      history.replaceState(null, '', '#' + target.dataset.src);
+    }
+    screens.forEach(b => b.addEventListener('click', () => show(b.dataset.src)));
+    show(location.hash.slice(1) || '/');
     addEventListener('resize', resize); resize(); tick(); setInterval(tick, 20000);
   </script>
 </body>

@@ -1,0 +1,1991 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="referrer" content="no-referrer">
+  <title>Report a motor claim · Retakt</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/retakt.css">
+  <style>
+    /* Seitenspezifisch. Einige Namen (--muted, --line, --accent, --ink, --paper) werden auch vom
+       Skript /assets/claim_assistance.js benutzt, das eigene Styles einhaengt; hier dunkel belegt. */
+    :root {
+      --muted: oklch(0.68 0 0);            /* Textgrau (ueberschreibt Flaechen-Token aus retakt.css) */
+      --hover: oklch(0.2 0 0);
+      --line: oklch(0.28 0 0);
+      --ink: oklch(0.95 0 0);
+      --accent: oklch(0.92 0 0);
+      --paper: oklch(0.15 0 0);
+      --ground: oklch(0.12 0 0);
+      --error: oklch(0.68 0.19 25);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+    }
+    html { -webkit-tap-highlight-color: transparent; }
+    body { overflow-x: hidden; color: var(--foreground); }
+    h1, h2, h3 { margin: 0; }
+    .topbar { top: max(12px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); }
+    .topbar .product { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; color: var(--muted); }
+    .layout {
+      max-width: 820px; margin: 0 auto;
+      padding: calc(84px + env(safe-area-inset-top, 0px)) clamp(16px, 4vw, 40px) calc(40px + var(--safe-b));
+    }
+    .side { margin: 0 0 20px; }
+    .side h1 { font-size: clamp(30px, 6vw, 44px); margin: 0 0 10px; max-width: 14em; }
+    .sub { margin: 0; color: var(--muted); font-size: 15px; max-width: 46ch; }
+
+    /* Fortschritt: Pillen-Schritte */
+    .stages { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+    .stage {
+      display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px;
+      border: 1px solid var(--border); font: 500 12px var(--font-mono); color: var(--muted); white-space: nowrap;
+    }
+    .stage[aria-current='step'] { color: var(--foreground); border-color: var(--decision-standard-line); background: var(--decision-standard-soft); }
+    .stage.done { color: var(--foreground); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--muted); display: block; flex: none; }
+    .stage.active .dot { background: var(--foreground); border-color: var(--foreground); }
+    .stage.done .dot { background: var(--decision-fast); border-color: var(--decision-fast); }
+
+    .chat { min-width: 0; }
+    .log { display: grid; gap: 12px; }
+    .log:not(:empty) { margin-bottom: 14px; }
+    .previous { border: 1px solid var(--border); border-radius: 12px; padding: 4px 14px; background: var(--card); }
+    summary { cursor: pointer; font-weight: 500; padding: 10px 0; min-height: 44px; display: flex; align-items: center; }
+    summary::marker { color: var(--muted); }
+    details[open] > summary { margin-bottom: 2px; }
+
+    .card { padding: clamp(16px, 3.5vw, 28px); scroll-margin: 80px; border-radius: 14px; min-width: 0; }
+    .card h2 { font-size: clamp(24px, 5.2vw, 32px); margin: 0 0 10px; outline: none; }
+    .card h3 { font-size: 17px; margin: 18px 0 6px; }
+    .help { color: var(--muted); margin: 0 0 18px; font-size: 15px; }
+    form { margin: 0; }
+    .label { display: block; margin: 16px 0 6px; font: 500 12px var(--font-mono); text-transform: uppercase; color: var(--muted); }
+    input, textarea, select {
+      color: var(--foreground); background: var(--popover); border: 1px solid var(--input); border-radius: 4px;
+      max-width: 100%; min-height: 44px; padding: 10px 12px; width: 100%; font: 400 16px var(--font-sans);
+    }
+    select { appearance: none; -webkit-appearance: none; padding-right: 34px;
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+    textarea { resize: vertical; min-height: 110px; }
+    input:focus-visible, textarea:focus-visible, select:focus-visible { border-color: var(--decision-standard-line); outline-offset: 1px; }
+    input[type='date'] { color-scheme: dark; }
+    input[readonly] { font: 400 13px var(--font-mono); }
+    input::file-selector-button { border: 1px solid var(--border); background: var(--muted); color: var(--foreground); border-radius: 4px; padding: 5px 9px; margin-right: 10px; }
+
+    .actions, .choices { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px;
+      padding: 8px 16px; border-radius: 4px; border: 1px solid var(--border); background: transparent;
+      color: var(--foreground); font-weight: 500; font-size: 14px; line-height: 1.2; text-align: center;
+    }
+    .btn:hover:not(:disabled) { background: var(--hover); border-color: var(--decision-standard-line); }
+    .btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+    .btn.primary:hover:not(:disabled) { background: oklch(0.9 0 0); }
+    .btn.quiet { border-color: transparent; background: transparent; padding: 6px 8px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; min-height: 40px; }
+    .btn.quiet:hover:not(:disabled) { color: var(--foreground); background: transparent; border-color: transparent; }
+    button:disabled { cursor: wait; opacity: .5; }
+    .choices .btn:not(.quiet) { border-radius: 999px; }
+    .choices .btn.primary { border-radius: 999px; }
+
+    .files, .review { margin: 18px 0 0; padding: 0; list-style: none; }
+    .file, .field { display: flex; gap: 12px; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); padding: 12px 0; }
+    .field div, .file div { min-width: 0; }
+    .review { margin: 18px 0 0; }
+    .previous .review { margin-top: 0; }
+    .field dt, .file small { color: var(--muted); font: 500 12px var(--font-mono); text-transform: uppercase; }
+    .field dd, .file span { margin: 3px 0 0; display: block; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 15px; }
+    .file span { font-family: var(--font-mono); font-size: 13px; }
+    .file .quiet, .field .quiet { flex: none; }
+    .file { flex-wrap: wrap; }
+    .file-info { flex: 1 1 115px; }
+    .file-buttons { display: flex; flex-wrap: wrap; align-items: center; }
+    .thumb { width: 64px; height: 64px; border-radius: 6px; object-fit: contain; background: var(--ground); border: 1px solid var(--border); flex: none; }
+    .docs-area { display: grid; gap: 8px; }
+    .upload-controls { margin-top: 18px; padding-top: 4px; border-top: 1px solid var(--border); }
+
+    .error { color: var(--error); font-size: 14px; margin: 12px 0 0; }
+    .error:not([hidden]) { padding: 10px 12px; border: 1px solid var(--decision-reject-line); background: var(--decision-reject-soft); border-radius: 10px; }
+    .sr { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; white-space: nowrap; }
+
+    .drop-zone {
+      display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center;
+      border: 1px dashed var(--decision-standard-line); background: oklch(1 0 0 / 0.025); padding: 26px 16px; border-radius: 12px;
+    }
+    .drop-zone .choices { margin-top: 0; justify-content: center; }
+    .drop-zone.over { background: var(--decision-standard-soft); border-color: var(--foreground); }
+    .upload-icon { font: 400 26px/1 var(--font-mono); width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 999px; color: var(--foreground); }
+    .opening-image { display: block; max-width: 100%; width: auto; max-height: 44vh; margin: 12px auto 20px; background: var(--ground); border: 1px solid var(--border); border-radius: 8px; }
+    .sample { display: inline-block; font-size: 14px; color: var(--foreground); margin-top: 0; padding: 8px 2px; }
+    .sample-links { display: flex; flex-wrap: wrap; gap: 0 18px; margin-top: 8px; }
+    .actions .sample { margin-top: 0; }
+    .sample-docs { margin: 14px 0; }
+    .sample-docs a { color: var(--foreground); display: inline-block; padding: 6px 0; }
+    .sample-docs ul { margin: 4px 0; padding-left: 20px; }
+    .file-hint, .citation { color: var(--muted); font-size: 13px; }
+    .file-hint { margin: 10px 0 0; }
+    .citation { display: block; margin: 4px 0 8px; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; }
+    .suggestion { margin-top: 15px; }
+    .suggestion .choices { margin-top: 7px; }
+    .suggestion .choices button { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+
+    .evidence-note, .photo-detail, .assistance-panel {
+      flex: 1 0 100%; min-width: 0; overflow-wrap: anywhere; margin: 12px 0;
+      border: 1px solid var(--border); border-left: 3px solid var(--decision-standard-line);
+      border-radius: 10px; padding: 10px 14px; background: oklch(1 0 0 / 0.02);
+    }
+    .evidence-note h3, .evidence-note p { margin: 4px 0 8px; }
+    .evidence-note strong { font-weight: 500; }
+    .photo-guide img { max-width: 100%; height: auto; border: 1px solid var(--border); }
+    .photo-guide h3 { margin-top: 0; }
+
+    .checklist { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 6px; }
+    .checklist li { display: flex; flex-wrap: wrap; gap: 6px 10px; justify-content: space-between; align-items: center; font-size: 14px; border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; }
+    .checklist strong { font-weight: 500; }
+    .checklist span { font: 500 11.5px var(--font-mono); padding: 2px 8px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+    .checklist .present span { color: var(--decision-fast); background: var(--decision-fast-soft); border-color: var(--decision-fast-line); }
+    .checklist .missing span { color: var(--decision-standard); background: var(--decision-standard-soft); border-color: var(--decision-standard-line); }
+    .photo-actions { margin-top: 7px; }
+
+    .reference { font: 500 clamp(18px, 5vw, 26px)/1.4 var(--font-mono); overflow-wrap: anywhere; letter-spacing: 0.02em; margin: 4px 0 8px; padding: 12px 14px; border: 1px solid var(--decision-fast-line); background: var(--decision-fast-soft); color: var(--decision-fast); border-radius: 10px; }
+    .save-bar, .follow-up { border-top: 1px solid var(--border); margin-top: 22px; padding-top: 10px; }
+    .follow-up { padding-top: 0; }
+    .save-bar > button { padding-left: 0; }
+    .ask-link { color: var(--muted); }
+    .link-panel { margin: 14px 0; border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: oklch(1 0 0 / 0.02); }
+    .link-panel p { margin: 4px 0 9px; }
+    .link-panel input { font-size: 13px; margin: 6px 0; }
+    .garage-share img { display: block; width: min(320px, 100%); aspect-ratio: 1; margin: 12px 0; border: 1px solid var(--border); background: #fff; border-radius: 6px; }
+    .garage-share input { margin: 6px 0; }
+    .garage-share .btn { margin: 2px 6px 2px 0; }
+
+    .photo-note, .translation-review { border-top: 1px solid var(--border); padding-top: 8px; }
+    .translation-review blockquote { background: var(--decision-standard-soft); border-radius: 4px; border-inline-start-color: var(--decision-standard-line); }
+    .translation-review .btn[aria-pressed='true'] { border-color: var(--decision-fast-line); background: var(--decision-fast-soft); color: var(--decision-fast); }
+    .translation-review .confirmation { color: var(--decision-fast); }
+
+    /* Dialoge */
+    dialog { color: var(--foreground); background: var(--card-solid); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--edge-glow); }
+    dialog::backdrop { background: oklch(0 0 0 / .72); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+    #filing-help { padding: clamp(18px, 5vw, 28px); width: min(94vw, 33rem); max-height: 88dvh; overflow-y: auto; }
+    #filing-help h2 { font-size: 24px; margin: 0 0 14px; }
+    .help-exchange { background: var(--decision-standard-soft); border: 1px solid var(--border); padding: 12px 14px; margin: 0 0 14px; border-radius: 10px; overflow-wrap: anywhere; }
+    .help-exchange p { margin: 0; }
+    .help-exchange p + p { margin-top: 8px; color: var(--muted); }
+    #garage-projector { width: min(94vw, 760px); max-height: 96dvh; padding: clamp(12px, 3vw, 24px); }
+    .projector-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .projector-head h2 { font-size: 22px; margin: 0; }
+    #projected-code { display: block; width: min(100%, 60vh); aspect-ratio: 1; margin: 12px auto; background: #fff; border-radius: 6px; }
+    #projected-garage-link { display: block; text-align: center; padding: 8px; }
+
+    @media (max-width: 720px) {
+      .actions .btn:not(.quiet), .choices .btn:not(.quiet) { flex: 1 1 auto; }
+      .field, .file { align-items: flex-start; }
+      .drop-zone .choices .btn { flex: 1 1 100%; }
+    }
+    @media (max-width: 480px) {
+      .file-buttons { flex-basis: 100%; }
+      .topbar .product { display: none; }
+    }
+    @media (min-width: 721px) {
+      input, textarea, select { font-size: 15px; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .card { animation: appear .18s ease-out; }
+      @keyframes appear { from { opacity: .65; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+    }
+      /* Beschreibungstext unter der Ueberschrift ausgeblendet (Skript schreibt im Demo-Modus weiter hinein) */
+    .side .sub { display: none; }
+  </style>
+</head>
+<body data-voice-agent="">
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="29.245 29.245 80 80" fill="currentColor" aria-hidden="true"><path d="M29.245 29.245h16.667v80H29.245zM49.245 29.245h8.334v80h-8.334zM62.434 29.245h5.145v80h-5.145zM79.245 29.245h3.333v80h-3.333zM105.912 29.245h3.333v80h-3.333z"/></svg>
+      Retakt <span class="eyebrow">Claim intake</span>
+    </div>
+    <span class="product">Motor claims</span>
+  </header>
+  <main class="layout">
+    <aside class="side">
+      <h1>Report a motor claim</h1>
+      <p class="sub">
+        Start with a photo or report, or tell us what happened.
+      </p>
+      <ol class="stages" id="stages" aria-label="Claim progress"></ol>
+    </aside>
+    <section class="chat" aria-label="Claim intake conversation">
+      <div class="log" id="history" aria-label="Your answers"></div>
+      <div id="current"></div>
+      <p id="announce" class="sr" role="status"></p>
+    </section>
+  </main>
+    <dialog id="garage-projector" aria-labelledby="projector-title">
+      <div class="projector-head">
+        <h2 id="projector-title">Scan to send a garage quote</h2>
+        <form method="dialog"><button class="btn" autofocus>Close</button></form>
+      </div>
+      <img id="projected-code" alt="Garage upload QR code">
+      <a id="projected-garage-link" target="_blank" rel="noreferrer noopener">Open garage upload</a>
+    </dialog>
+    <dialog id="filing-help" aria-labelledby="help-title">
+      <h2 id="help-title">Ask about filing your claim</h2>
+      <div id="help-exchange" class="help-exchange" hidden>
+        <p><strong id="asked-question"></strong></p>
+        <p id="filing-reply" tabindex="-1"></p>
+      </div>
+      <form id="help-form">
+        <label class="label" for="filing-question">Your question</label>
+        <input id="filing-question" type="text" maxlength="1000" required
+          placeholder="Can I send the repair quote later?" autocomplete="off" />
+        <div class="actions">
+          <button type="submit" class="btn primary" id="send-question">Ask</button>
+          <button type="button" class="btn" id="close-help">Back to claim</button>
+        </div>
+      </form>
+      <button type="button" id="keep-answer" class="btn quiet" hidden>Use this text as my claim answer</button>
+    </dialog>
+    <script src="/assets/claim_assistance.js"></script>
+    <script>
+      'use strict';
+      const fields = [
+        {
+          key: 'description',
+          label: 'What happened',
+          prompt: 'What happened to your vehicle?',
+          hint: 'Describe the incident and any damage you noticed.',
+          type: 'textarea',
+          min: 10,
+          max: 2000
+        },
+        {
+          key: 'incident_date',
+          label: 'Incident date',
+          prompt: 'When did the incident happen?',
+          hint: 'Enter the date of the incident.',
+          type: 'date'
+        },
+        {
+          key: 'location',
+          label: 'Incident location',
+          prompt: 'Where did it happen?',
+          hint: 'A street, town or nearby landmark works.',
+          type: 'text',
+          max: 160
+        },
+        {
+          key: 'policy_number',
+          label: 'Policy number',
+          prompt: 'What is your policy number?',
+          hint: 'You can find this on your insurance documents.',
+          type: 'text',
+          max: 80
+        },
+        {
+          key: 'email',
+          label: 'Contact email',
+          prompt: 'Which email can the claims team use?',
+          hint: 'Enter the address you use for claim updates.',
+          type: 'email',
+          max: 254
+        },
+        {
+          key: 'injury_status',
+          label: 'Injuries reported',
+          prompt: 'Was anyone injured?',
+          hint: 'If you are unsure, choose “I don’t know.”',
+          type: 'choice'
+        }
+      ];
+      const kinds = {
+        incident_report: 'Incident report',
+        itemized_quote: 'Itemized repair quote',
+        damage_photo: 'Damage photo'
+      };
+      const injuries = { yes: 'Yes', no: 'No', unknown: 'I don’t know' };
+      const names = ['Incident', 'Claim details', 'Documents', 'Review'];
+      const docsStep = fields.length;
+      const reviewStep = docsStep + 1;
+      const welcomeStep = -1;
+      const importStep = -2;
+      const receiptStep = -3;
+      const requiredKinds = ['incident_report', 'itemized_quote'];
+      const maxFiles = 4;
+      const maxImageBytes = 12 * 1024 * 1024;
+      const maxBytes = 2 * 1024 * 1024;
+      const intakeFormats = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
+      const historyEl = document.querySelector('#history');
+      const current = document.querySelector('#current');
+      const stages = document.querySelector('#stages');
+      let demoCase = null;
+      let step = welcomeStep;
+      let editing = false;
+      let values = {};
+      let sources = {};
+      let partialAnswer = '';
+      let files = [];
+      let importResult = null;
+      let importFile = null;
+      let revision = 0;
+      let token = '';
+      let requestId = '';
+      let receipt = null;
+      let pending = null;
+      let busy = false;
+      let saveNotice = false;
+      let conflict = false;
+      let garageRequest = null;
+      let issuingGarageLink = false;
+      let checkingReceipt = false;
+
+      function el(tag, cls, text) {
+        const node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function button(text, cls, action) {
+        const node = el('button', 'btn ' + cls, text);
+        node.type = 'button';
+        node.addEventListener('click', () => {
+          if (!busy) action();
+        });
+        return node;
+      }
+
+      function today() {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Europe/Berlin',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).formatToParts(new Date());
+        const part = (key) => parts.find((p) => p.type === key).value;
+        return [part('year'), part('month'), part('day')].join('-');
+      }
+
+      function uid() {
+        if (crypto.randomUUID) return crypto.randomUUID();
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 15) | 64;
+        bytes[8] = (bytes[8] & 63) | 128;
+        const hex = hexString(bytes);
+        return [
+          hex.slice(0, 8),
+          hex.slice(8, 12),
+          hex.slice(12, 16),
+          hex.slice(16, 20),
+          hex.slice(20)
+        ].join('-');
+      }
+
+      function hexString(bytes) {
+        return Array.from(bytes, (byte) =>
+          byte.toString(16).padStart(2, '0')
+        ).join('');
+      }
+
+      function privateToken() {
+        if (!token)
+          token = hexString(crypto.getRandomValues(new Uint8Array(32)));
+        return token;
+      }
+
+      function privateURL() {
+        const url = new URL('/chat', location.origin);
+        url.hash = 'claim=' + token;
+        return url.href;
+      }
+
+      function status(text) {
+        document.getElementById('announce').textContent = text;
+      }
+
+      function heading(card, title, help) {
+        const titleEl = el('h2', '', title);
+        titleEl.id = 'question-title';
+        titleEl.tabIndex = -1;
+        card.append(titleEl);
+        if (help) card.append(el('p', 'help', help));
+      }
+
+      function showError(text) {
+        const err = current.querySelector('[role=alert]');
+        if (!err) return;
+        err.textContent = text;
+        err.hidden = !text;
+      }
+
+      function row(label, value, action) {
+        const item = el('div', 'field');
+        const details = el('div');
+        details.append(el('dt', '', label), el('dd', '', value));
+        item.append(details);
+        if (action) {
+          const edit = button('Edit', 'quiet', action);
+          edit.setAttribute('aria-label', 'Edit ' + label);
+          item.append(edit);
+        }
+        return item;
+      }
+
+      function setStep(next, isEdit = false) {
+        step = next;
+        editing = isEdit;
+        partialAnswer = '';
+        saveNotice = false;
+        render(true);
+      }
+
+      function nextUnanswered() {
+        const index = fields.findIndex((field) => !values[field.key]);
+        return index === -1 ? docsStep : index;
+      }
+
+      function setBusy(value) {
+        busy = value;
+        current.setAttribute('aria-busy', String(value));
+        current.inert = value;
+      }
+
+      async function api(path, body, base = '/api/intakes/') {
+        const resp = await fetch(base + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          cache: 'no-store',
+          referrerPolicy: 'no-referrer'
+        });
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok) {
+          const error = new Error(
+            typeof data?.error === 'string'
+              ? data.error
+              : 'Could not complete this request.'
+          );
+          error.status = resp.status;
+          throw error;
+        }
+        if (!data || typeof data !== 'object')
+          throw new Error('Could not read the response.');
+        return data;
+      }
+
+      function fieldInput(field, id) {
+        const node = el(field.type === 'textarea' ? 'textarea' : 'input');
+        node.id = id;
+        node.name = field.key;
+        if (field.type !== 'textarea') node.type = field.type;
+        if (field.type === 'email')
+          node.pattern = '[^\\s@]+@[^\\s@.]+([.][^\\s@.]+)+';
+        if (field.type === 'date') node.max = today();
+        if (field.min) node.minLength = field.min;
+        if (field.max) node.maxLength = field.max;
+        node.autocomplete = field.type === 'email' ? 'email' : 'off';
+        node.addEventListener('input', () => node.setCustomValidity(''));
+        return node;
+      }
+
+      function validField(field, node) {
+        const value = node.value.trim();
+        if (!value || (field.min && value.length < field.min)) {
+          node.setCustomValidity(
+            field.min
+              ? 'Enter at least ' + field.min + ' characters.'
+              : 'Enter an answer.'
+          );
+        }
+        return node.reportValidity();
+      }
+
+      function sourceLabel(source) {
+        return source.name + ' · page ' + source.page;
+      }
+
+      function drawProgress() {
+        document.querySelector('.sub').textContent = demoCase
+          ? 'Fictional sample claim · ' + demoCase
+          : 'Start with a photo or report, or tell us what happened.';
+        const stage = receipt
+          ? 4
+          : step < 3
+            ? 0
+            : step < docsStep
+              ? 1
+              : step === docsStep
+                ? 2
+                : 3;
+        stages.replaceChildren(
+          ...names.map((name, index) => {
+            const item = el(
+              'li',
+              'stage ' +
+                (index < stage ? 'done' : index === stage ? 'active' : '')
+            );
+            if (index === stage) item.setAttribute('aria-current', 'step');
+            item.append(el('span', 'dot'), document.createTextNode(name));
+            return item;
+          })
+        );
+      }
+
+      function drawHistory() {
+        historyEl.replaceChildren();
+        if (step < 0 || step >= reviewStep || editing) return;
+        const completed = fields.filter(
+          (field) => values[field.key] && field !== fields[step]
+        );
+        if (!completed.length) return;
+        const details = el('details', 'previous');
+        details.append(
+          el('summary', '', 'Your answers (' + completed.length + ')')
+        );
+        const list = el('dl', 'review');
+        completed.forEach((field) =>
+          list.append(row(field.label, labelValue(field)))
+        );
+        details.append(list);
+        historyEl.append(details);
+      }
+
+      function labelValue(field) {
+        return field.type === 'choice'
+          ? injuries[values[field.key]]
+          : values[field.key];
+      }
+
+      function validateFile(file, kind = '') {
+        if (!file?.size) throw new Error('Choose a non-empty file.');
+        if (!file.name.trim() || file.name !== file.name.trim() || file.name.length > 180 ||
+            /[\x00-\x1f\x7f-\x9f/\\]/.test(file.name))
+          throw new Error('Use a filename up to 180 characters without path separators.');
+        const ext = file.name.toLowerCase().split('.').pop();
+        const image = ['png', 'jpg', 'jpeg'].includes(ext);
+        if (!image && ext !== 'pdf') throw new Error('Choose a PDF, JPEG or PNG file.');
+        if (!image && kind === 'damage_photo') throw new Error('Choose a JPEG or PNG damage photo.');
+        const limit = image && (!receipt || receipt.evidence) ? maxImageBytes : maxBytes;
+        if (file.size > limit) throw new Error('Choose a file up to ' + limit / (1024 * 1024) + ' MiB.');
+        return ext;
+      }
+
+      async function encodeFile(file, kind) {
+        const ext = validateFile(file, kind);
+        const header = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+        const signature = ext === 'pdf' ? [37,80,68,70,45] :
+                          ext === 'png' ? [137,80,78,71,13,10,26,10] : [255,216,255];
+        if (!signature.every((byte, index) => header[index] === byte))
+          throw new Error('The file contents do not match its extension. Choose the original PDF, JPEG or PNG.');
+        const encoded = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.onerror = () =>
+            reject(
+              new Error('The file could not be read. Please choose it again.')
+            );
+          reader.readAsDataURL(file);
+        });
+        return { kind, name: file.name, content_base64: encoded };
+      }
+
+      function fileButton(container, label, id, accept, onFiles, options = {}) {
+        const input = el('input');
+        input.type = 'file';
+        input.id = id;
+        input.hidden = true;
+        input.accept = accept;
+        input.multiple = Boolean(options.multiple);
+        if (options.camera) input.setAttribute('capture', 'environment');
+        const choose = button(label, options.style || '', () => input.click());
+        input.addEventListener('change', () => {
+          const selected = Array.from(input.files);
+          input.value = '';
+          if (selected.length && !busy) onFiles(selected);
+        });
+        container.append(input, choose);
+        return choose;
+      }
+
+      function sampleQuotes(card) {
+        const examples = el('details', 'sample-docs');
+        examples.append(el('summary', '', 'Download sample garage quotes'));
+        const list = el('ul');
+        for (const [name, label] of [
+          ['total-only-890.pdf', '€890 total only'],
+          ['itemized-890.pdf', '€890 itemized'],
+          ['itemized-1800.pdf', '€1,800 itemized'],
+          ['unreadable-total.pdf', 'Unreadable total']
+        ]) {
+          const link = el('a', '', label);
+          link.href = '/examples/quotes/' + name;
+          link.download = name;
+          const item = el('li');
+          item.append(link);
+          list.append(item);
+        }
+        examples.append(list);
+        card.append(examples);
+      }
+
+      function drawWelcome(card) {
+        if (new URLSearchParams(location.search).get('demo') === 'DEV-003') {
+          heading(card, 'Try the €890 bumper claim', 'Fictional demo DEV-003 comes with an incident report. Upload a garage quote to see whether it answers the reviewer’s question.');
+          card.append(button('Start sample claim', 'primary', () => {
+            demoCase = 'DEV-003';
+            values = {
+              description: 'My bumper was damaged in a parking incident.',
+              incident_date: '2025-10-18', location: 'Demo car park, Munich',
+              policy_number: 'DEMO-003', email: 'driver@example.invalid', injury_status: 'no'
+            };
+            setStep(docsStep);
+          }));
+          sampleQuotes(card);
+          return;
+        }
+        heading(
+          card,
+          'How would you like to start?',
+          'Attach a damage photo, an accident report or a repair quote. You can also start by describing the incident.'
+        );
+        const drop = el('div', 'drop-zone');
+        const icon = el('span', 'upload-icon', '↑');
+        icon.setAttribute('aria-hidden', 'true');
+        drop.append(icon);
+        const choose = el('div', 'choices');
+        fileButton(choose, 'Choose a photo or PDF', 'import-file', intakeFormats,
+          (list) => openFile(list[0]), {style:'primary'});
+        fileButton(choose, 'Take a photo', 'opening-camera', 'image/jpeg,image/png',
+          (list) => openFile(list[0]), {camera:true});
+        drop.append(choose, el('span', 'file-hint',
+          'Or drop one file here. JPEG and PNG up to 12 MiB. PDF up to 2 MiB.'));
+        drop.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          drop.classList.add('over');
+        });
+        drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+        drop.addEventListener('drop', (event) => {
+          event.preventDefault();
+          drop.classList.remove('over');
+          if (busy) return;
+          if (event.dataTransfer.files.length !== 1)
+            return showError('Drop one photo or PDF to start your claim.');
+          openFile(event.dataTransfer.files[0]);
+        });
+        const actions = el('div', 'actions');
+        actions.append(button('Tell me what happened', '', () => setStep(0)));
+        const agent = document.body.dataset.voiceAgent;
+        if (agent) {
+          const call = el('a', 'sample', 'Try the voice demo');
+          call.href = 'https://elevenlabs.io/app/talk-to?agent_id=' + encodeURIComponent(agent);
+          call.referrerPolicy = 'no-referrer';
+          actions.append(call);
+        }
+        const sample = el('a', 'sample', 'Download sample accident report');
+        sample.href = '/sample-accident-report.pdf';
+        sample.download = 'sample-accident-report.pdf';
+        const german = el('a', 'sample', 'Download German sample report');
+        german.href = '/examples/photo-guide/accident-report-de.pdf';
+        german.download = 'accident-report-de.pdf';
+        const examples = el('div', 'sample-links');
+        examples.append(sample, german);
+        card.append(drop, actions, examples);
+      }
+
+      async function openFile(file) {
+        setBusy(true);
+        showError('');
+        status('Preparing your file.');
+        try {
+          const doc = await encodeFile(file, '');
+          if (!/\.pdf$/i.test(doc.name)) {
+            const preview = previewImage(doc);
+            try { await preview.decode(); } catch { throw new Error('Couldn’t open the image. Choose the original JPEG or PNG.'); }
+            const exifDate = await ClaimAssistance.photoCaptureDate(file);
+            importFile = doc;
+            importResult = {image:true, exifDate};
+            setStep(importStep);
+            return;
+          }
+          importFile = doc;
+          try {
+            importResult = await api('import-pdf', {
+              name: importFile.name,
+              content_base64: importFile.content_base64
+            });
+            if (!Array.isArray(importResult.suggestions))
+              throw new Error('Unexpected import response.');
+          } catch {
+            importResult = {
+              suggestions: [],
+              document_kind: null,
+              notice:
+                'We couldn’t read the PDF. You can attach it and enter the answers yourself.'
+            };
+          }
+          if (importResult.document_kind === 'itemized_quote') {
+            importFile.kind = 'itemized_quote';
+            await assessQuote(importFile);
+          }
+          setStep(importStep);
+        } catch (error) {
+          showError(error.message);
+        } finally {
+          setBusy(false);
+          status('');
+        }
+      }
+
+      function kindSelect(includeBlank) {
+        const select = el('select');
+        if (includeBlank) select.add(new Option('Choose document type', ''));
+        requiredKinds.forEach((key) => select.add(new Option(kinds[key], key)));
+        return select;
+      }
+
+      function previewImage(doc, style = 'thumb') {
+        const image = el('img', style);
+        image.alt = 'Preview of ' + doc.name;
+        image.src = 'data:image/' + (/\.png$/i.test(doc.name) ? 'png' : 'jpeg') +
+          ';base64,' + doc.content_base64;
+        return image;
+      }
+
+      function previewQuoteChoice(select, panel) {
+        const doc = importFile;
+        const update = async () => {
+          panel.replaceChildren();
+          if (select.value !== 'itemized_quote') return;
+          if (!doc.assessment) {
+            setBusy(true);
+            try {
+              doc.kind = 'itemized_quote';
+              await assessQuote(doc);
+            } finally {
+              setBusy(false);
+            }
+          }
+          showQuote(panel, doc.assessment);
+        };
+        update();
+        select.addEventListener('change', update);
+      }
+
+      function drawImageImport(card) {
+        heading(card, 'Check your image', importFile.name);
+        card.append(previewImage(importFile, 'opening-image'));
+        const form = el('form');
+        const label = el('label', 'label', 'What does this image show?');
+        const select = el('select');
+        label.htmlFor = select.id = 'opening-image-kind';
+        select.required = true;
+        select.add(new Option('Choose an image type', ''));
+        for (const kind of ['damage_photo', 'incident_report', 'itemized_quote'])
+          select.add(new Option(kinds[kind], kind));
+        const panel = el('div');
+        previewQuoteChoice(select, panel);
+        form.append(label, select, panel, el('p', 'file-hint',
+          'We’ll keep the original image. You’ll enter the incident details in the next steps.'));
+        const controls = el('div', 'actions');
+        const attach = el('button', 'btn primary', 'Attach image and continue');
+        attach.type = 'submit';
+        controls.append(attach);
+        fileButton(controls, 'Replace file', 'replace-start-file', intakeFormats, (list) => openFile(list[0]));
+        controls.append(button('Cancel', 'quiet', () => {
+          importFile = importResult = null;
+          setStep(welcomeStep);
+        }));
+        form.append(controls);
+        form.addEventListener('submit', event => {
+          event.preventDefault();
+          if (!select.reportValidity()) return;
+          const doc = {...importFile, kind:select.value};
+          if (doc.kind !== 'itemized_quote') delete doc.assessment;
+          if (doc.kind === 'damage_photo') doc.assistance = {
+            exif_date:importResult.exifDate, manual_date:'', explanation:'', view:''
+          };
+          files.push(doc);
+          importFile = importResult = null;
+          setStep(nextUnanswered());
+        });
+        card.append(form);
+      }
+
+      function drawImport(card) {
+        heading(card, 'Check your PDF details', importFile.name);
+        if (importResult.notice)
+          card.append(el('p', 'help', importResult.notice));
+        const form = el('form');
+        form.noValidate = true;
+        const typeLabel = el('label', 'label', 'Document type');
+        typeLabel.htmlFor = 'import-kind';
+        const select = kindSelect(true);
+        select.id = 'import-kind';
+        select.required = true;
+        select.value =
+          importResult.document_kind in kinds ? importResult.document_kind : '';
+        form.append(typeLabel, select);
+        const quotePanel = el('div');
+        form.append(quotePanel);
+        previewQuoteChoice(select, quotePanel);
+        const extracted = [];
+        let translation = importResult.translation;
+        for (const field of fields.filter((f) => f.type !== 'choice')) {
+          if (translation && field.key === 'description') continue;
+          const options = importResult.suggestions.filter(
+            (s) =>
+              s.field === field.key &&
+              typeof s.value === 'string' &&
+              Number.isInteger(s.page)
+          );
+          if (!options.length) continue;
+          const wrap = el('div', 'suggestion');
+          const label = el('label', 'label', field.label);
+          const input = fieldInput(field, 'import-' + field.key);
+          label.htmlFor = input.id;
+          const conflict = new Set(options.map((s) => s.value)).size > 1;
+          let source = conflict
+            ? null
+            : { name: importFile.name, page: options[0].page };
+          const cite = el(
+            'small',
+            'citation',
+            source
+              ? sourceLabel(source)
+              : 'Several values found. Choose one or enter your own.'
+          );
+          input.defaultValue = conflict ? '' : options[0].value;
+          const matchingSource = () => {
+            const match =
+              options.find(
+                (option) =>
+                  option.value === input.value.trim() &&
+                  (!source || option.page === source.page)
+              ) ||
+              options.find((option) => option.value === input.value.trim());
+            return match ? { name: importFile.name, page: match.page } : null;
+          };
+          input.addEventListener('input', () => {
+            const matched = matchingSource();
+            cite.textContent = matched
+              ? sourceLabel(matched)
+              : input.value.trim()
+                ? 'Your correction · originally suggested from ' +
+                  importFile.name
+                : 'You can answer this question later.';
+          });
+          wrap.append(label, cite, input);
+          if (conflict) {
+            const choices = el('div', 'choices');
+            for (const option of options) {
+              choices.append(
+                button(option.value + ' · page ' + option.page, '', () => {
+                  input.defaultValue = input.value = option.value;
+                  input.setCustomValidity('');
+                  source = { name: importFile.name, page: option.page };
+                  cite.textContent = sourceLabel(source);
+                })
+              );
+            }
+            wrap.append(choices);
+          }
+          extracted.push({ field, input, source: matchingSource });
+          form.append(wrap);
+        }
+        if (translation) {
+          const panel = el('div', 'assistance-panel');
+          panel.hidden = select.value !== 'incident_report';
+          select.addEventListener('change', () => { panel.hidden = select.value !== 'incident_report'; });
+          ClaimAssistance.translationReview(panel, translation, (updated) => { translation = updated; });
+          form.append(panel);
+        }
+        const actions = el('div', 'actions');
+        const use = el(
+          'button',
+          'btn primary',
+          extracted.length || translation
+            ? 'Confirm details and continue'
+            : 'Attach PDF and continue'
+        );
+        use.type = 'submit';
+        actions.append(
+          use,
+          button('Choose another start', 'quiet', () => {
+            importResult = importFile = null;
+            setStep(welcomeStep);
+          })
+        );
+        form.append(actions);
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (select.value === 'incident_report' && translation && !translation.confirmed && !translation.use_original) {
+            showError('Confirm the English translation or choose to continue with the original German.');
+            form.querySelector('.assistance-panel')?.scrollIntoView({ block: 'nearest' });
+            return;
+          }
+          const chosen = extracted.filter((item) => item.input.value.trim());
+          for (const item of chosen) {
+            if (item.source() || item.literal === item.input.value) continue;
+            if (interceptFilingQuestion(item.input, () => {
+              item.literal = item.input.value;
+              form.requestSubmit();
+            })) return;
+          }
+          if (!select.reportValidity() || !chosen.every((item) => validField(item.field, item.input)))
+            return;
+          for (const item of chosen) {
+            values[item.field.key] = item.input.value.trim();
+            if (item.source()) sources[item.field.key] = item.source();
+          }
+          const doc = { ...importFile, kind: select.value };
+          if (translation && doc.kind === 'incident_report') {
+            doc.translation = translation;
+            values.description = translation.confirmed ? translation.english : translation.original;
+            sources.description = {name: doc.name, page: translation.page};
+          }
+          setBusy(true);
+          try {
+            if (doc.kind !== 'itemized_quote') delete doc.assessment;
+            files.push(doc);
+            importResult = importFile = null;
+            setStep(nextUnanswered());
+          } finally {
+            setBusy(false);
+          }
+        });
+        card.append(form);
+      }
+
+      const helpDialog = document.getElementById('filing-help');
+      const helpInput = document.getElementById('filing-question');
+      const helpReply = document.getElementById('filing-reply');
+      const keepAnswer = document.getElementById('keep-answer');
+      const closeHelp = document.getElementById('close-help');
+      const sendQuestion = document.getElementById('send-question');
+      const unrecognizedQuestion = 'I can help with filing steps, documents, photos, saving a draft and correcting answers. Try asking “Can I send the quote later?”';
+      let returnFocus;
+      let acceptLiteral;
+
+      function filingReply(question) {
+        const text = question.toLowerCase().replace(/[’']/g, '');
+        if (/\b(cover(ed|age)?|eligib\w*|approv\w*|reimburs\w*|payout|liab\w*|pay(s|ment)?|deadline|deductible|premium|fault|compensation|liable|refund|cost|costs)\b/.test(text))
+          return 'The claims team assesses coverage, payment and policy terms. You can record what happened and send your documents here.';
+        if (/\b(how (big|large)|how many (files?|photos?|attachments?|documents?)|file types?|size|limit|formats?|types? of files?|too large|mb|mib|jpeg|png|heic)\b/.test(text))
+          return receipt && !receipt.evidence
+            ? 'This receipt accepts an outstanding report or repair quote as a PDF, JPEG or PNG up to 2 MiB.'
+            : 'Attach up to four files when you start a claim. Each JPEG or PNG can be up to 12 MiB. Each PDF can be up to 2 MiB.';
+        if (/\b(photos?|pictures?|camera|gallery)\b/.test(text))
+          return receipt
+            ? 'The receipt accepts an outstanding incident report or repair quote. Damage photos can be attached before submission.'
+            : 'On the opening screen, choose Take a photo or Choose a photo or PDF. Choose whether it shows damage, an incident report or a repair quote. You can add more pictures at Documents before submitting.';
+        if (/\b(save|pause|resume|draft|finish later|continue later|come back|start again)\b/.test(text))
+          return receipt
+            ? 'Your claim has been submitted. Keep the private follow-up link on this receipt to reopen it.'
+            : 'Once you have started entering your answers, choose Save and continue later and copy the private link. Open it to return with your answers and attachments. Anyone with that link can open your draft.';
+        if (/\b(private|link|reference)\b/.test(text) && !/\b(quote|estimate|report|upload|attach)\b/.test(text))
+          return 'Saving a draft gives you a private link to resume. After submission, the same link opens your receipt and accepts missing paperwork. Keep the link private. The claim reference identifies your submission.';
+        if (/\b(edit|correct|change|mistake|wrong)\b/.test(text))
+          return receipt
+            ? 'Submitted answers are locked. The private link lets you check your receipt and add outstanding paperwork.'
+            : 'You can correct imported details before confirming them. At Review, choose Edit beside an answer to change it before submitting.';
+        if (/\b(policy (number|id)|find my policy)\b/.test(text))
+          return 'Look for the policy number on your insurance documents. You can save a draft while you look for it.';
+        if (/\b(injur\w*|hurt)\b/.test(text))
+          return 'At the injury question, choose Yes, No or I don’t know. Choose I don’t know if you are unsure.';
+        if (/\b(pdf|import|extract\w*)\b/.test(text) && !/\b(later|missing|after|without|size|receipt)\b/.test(text) && !receipt)
+          return 'Choose a photo or PDF on the opening screen. Check any answers suggested from a PDF. For an image, choose its type, then enter the incident details yourself.';
+        if (/\b(quotes?|estimates?|quotations?|reports?|documents?|docs?|paperwork|attach\w*|upload\w*|receipts?|evidence|pdf)\b/.test(text) || /\b(send|add) (it|them) later\b/.test(text)) {
+          if (receipt) {
+            if (receipt.evidence?.next_action)
+              return receipt.evidence.next_action.message + ' To share paperwork, open Add documents to this claim, attach the file, then choose Send additional documents.';
+            const missing = receipt.missing_documents.map((key) => kinds[key]);
+            return missing.length
+              ? 'Your receipt lists the outstanding paperwork: ' + missing.join(' and ') + '. Open Add documents to this claim, attach the file, then choose Send additional documents.'
+              : 'All requested paperwork has been received. Your receipt lists the files already sent.';
+          }
+          if (/\b(what is|whats|what does|what counts as)\b/.test(text) && /\b(quote|estimate)\b/.test(text))
+            return 'An itemized repair quote is an estimate from the repairer that lists the work and its costs. You can send it later using the private link on your receipt.';
+          const paperwork = /\b(quotes?|estimates?|quotations?)\b/.test(text)
+            ? 'the repair quote' : 'all the paperwork';
+          return 'You can submit before you have ' + paperwork + '. When you have the missing file, open the private link on your receipt and choose “Add documents to this claim”.';
+        }
+        if (/\b(next|after submission|after (?:i |we )?submit|how (?:do i|to) (?:file|submit))\b/.test(text))
+          return receipt
+            ? 'Your claim has been submitted. Your receipt lists the files received and any paperwork still needed.'
+            : 'At Review, check your answers and choose Submit claim. You will receive a claim reference, a list of received files and a private follow-up link.';
+        return unrecognizedQuestion;
+      }
+
+      function showFilingReply(question) {
+        document.getElementById('asked-question').textContent = question;
+        const reply = filingReply(question);
+        helpReply.textContent = reply;
+        keepAnswer.hidden = !(acceptLiteral && reply === unrecognizedQuestion);
+        closeHelp.classList.add('primary');
+        sendQuestion.classList.remove('primary');
+        helpInput.placeholder = 'Ask another filing question';
+        document.getElementById('help-exchange').hidden = false;
+        helpInput.value = '';
+        helpReply.focus();
+      }
+
+      function openFilingHelp(origin, question = '', useLiteral = null) {
+        returnFocus = origin;
+        acceptLiteral = useLiteral;
+        keepAnswer.hidden = true;
+        closeHelp.classList.remove('primary');
+        sendQuestion.classList.add('primary');
+        helpInput.placeholder = 'Can I send the repair quote later?';
+        document.getElementById('help-exchange').hidden = true;
+        helpInput.value = '';
+        helpDialog.showModal();
+        if (question) showFilingReply(question);
+        else helpInput.focus();
+      }
+
+      document.getElementById('help-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const question = helpInput.value.trim();
+        if (!question) return helpInput.focus();
+        acceptLiteral = null;
+        showFilingReply(question);
+      });
+      closeHelp.addEventListener('click', () => helpDialog.close());
+      keepAnswer.addEventListener('click', () => helpDialog.close('use-answer'));
+      helpDialog.addEventListener('close', () => {
+        const use = helpDialog.returnValue === 'use-answer' && acceptLiteral;
+        helpDialog.returnValue = '';
+        acceptLiteral = null;
+        document.getElementById('asked-question').textContent = '';
+        helpReply.textContent = '';
+        helpInput.value = '';
+        if (returnFocus?.isConnected) returnFocus.focus();
+        if (use) use();
+      });
+
+      function soundsLikeQuestion(text) {
+        const start = text.trim().replace(/^(?:hi|hey|hello)[,!]?\s+/i, '');
+        if (/^(?:can|could|may|should|would|will|do|did|does|am|are|is|must|have)\s+(?:i|we|you|it|my|the|this|there|a|an)\b/i.test(start))
+          return true;
+        if (/^(?:how|where|when|what|why|which|who)\s+(?:do|does|did|can|could|is|are|will|should|would|much|many|long|to|if)\b/i.test(start))
+          return true;
+        return /^(?:how|where|when|what|why|which|who|can|could|may|should|would|will|do|did|does|is|are|quote|repair quote|photos?|pdf|documents?)\b.*\?$/i.test(start);
+      }
+
+      function interceptFilingQuestion(input, useLiteral) {
+        if (!input) return false;
+        const original = input.value.trim();
+        // Keep any incident narrative before the question, including its punctuation.
+        const sentences = original.match(/[\s\S]+?(?:[.!?](?=\s|$)|\n|$)/g) || [];
+        const index = sentences.findIndex(soundsLikeQuestion);
+        if (index < 0) return false;
+        const question = sentences.slice(index).join('').trim();
+        const previous = input.defaultValue;
+        const prefix = sentences.slice(0, index).join('').trimEnd();
+        input.value = prefix || (previous === original ? '' : previous);
+        input.dispatchEvent(new Event('input'));
+        openFilingHelp(input, question, () => {
+          input.value = original;
+          input.dispatchEvent(new Event('input'));
+          useLiteral();
+        });
+        return true;
+      }
+
+      function drawQuestion(card) {
+        const field = fields[step];
+        heading(card, field.prompt, field.hint);
+        if (sources[field.key])
+          card.append(
+            el(
+              'p',
+              'citation',
+              'Imported from ' + sourceLabel(sources[field.key])
+            )
+          );
+        function finish(value) {
+          if (value !== (values[field.key] || partialAnswer))
+            delete sources[field.key];
+          values[field.key] = value;
+          setStep(editing ? reviewStep : nextUnanswered());
+        }
+        if (field.type === 'choice') {
+          const choices = el('div', 'choices');
+          Object.entries(injuries).forEach(([key, name]) =>
+            choices.append(
+              button(name, values[field.key] === key ? 'primary' : '', () =>
+                finish(key)
+              )
+            )
+          );
+          card.append(choices);
+        } else {
+          const form = el('form');
+          form.noValidate = true;
+          const input = fieldInput(field, 'answer');
+          input.defaultValue = partialAnswer || values[field.key] || '';
+          input.required = true;
+          input.setAttribute('aria-labelledby', 'question-title');
+          const actions = el('div', 'actions');
+          const proceed = el(
+            'button',
+            'btn primary',
+            editing ? 'Save answer' : 'Continue'
+          );
+          proceed.type = 'submit';
+          actions.append(proceed);
+          form.append(input, actions);
+          form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const commit = () => {
+              if (validField(field, input)) finish(input.value.trim());
+            };
+            if (!interceptFilingQuestion(input, commit)) commit();
+          });
+          card.append(form);
+        }
+        if (editing)
+          card.append(
+            button('Cancel edit', 'quiet', () => setStep(reviewStep))
+          );
+        else if (step > 0) {
+          card.append(button('Back', 'quiet', () => setStep(step - 1)));
+        }
+      }
+
+      function attachmentBody({kind, name, content_base64}) {
+        return {kind, name, content_base64};
+      }
+
+      function attachmentNotes(docs) {
+        const photos = [];
+        const translations = [];
+        docs.forEach((doc, position) => {
+          if (doc.kind === 'damage_photo' && doc.assistance)
+            photos.push({...doc.assistance, position});
+          if (doc.kind === 'incident_report' && doc.translation)
+            translations.push({...doc.translation, position});
+        });
+        return { photos, translations };
+      }
+
+      function restoreNotes(docs, notes) {
+        for (const {position, ...photo} of notes?.photos || []) {
+          if (docs[position]?.kind === 'damage_photo')
+            docs[position].assistance = photo;
+        }
+        for (const {position, ...translation} of notes?.translations || []) {
+          if (docs[position]?.kind === 'incident_report')
+            docs[position].translation = translation;
+        }
+      }
+
+      async function assessQuote(doc) {
+        try {
+          doc.assessment = await api('quote', {document: attachmentBody(doc)}, '/api/evidence/');
+        } catch {
+          doc.assessment = {status: 'received', name: doc.name,
+            reason: 'The quote was attached. Its contents could not be checked here.'};
+        }
+      }
+
+      function quoteStatus(quote) {
+        if (quote?.review_required) return 'Photo received for review';
+        if (quote?.status === 'verified') return 'Verified';
+        if (quote?.status === 'needs_clarification') return 'Needs clarification';
+        return 'Received · awaiting verification';
+      }
+
+      function checklist(card, docs) {
+        const group = el('ul', 'checklist');
+        group.setAttribute('aria-label', 'Document checklist');
+        for (const kind of requiredKinds) {
+          const matching = docs.filter((doc) => doc.kind === kind);
+          const latest = matching[matching.length - 1];
+          let label = latest ? 'Received' : 'Still needed';
+          if (kind === 'incident_report' && demoCase && !latest) label = 'Received in sample claim';
+          if (kind === 'itemized_quote' && latest) label = quoteStatus(latest.assessment);
+          const line = el('li', label === 'Still needed' || label === 'Needs clarification' ? 'missing' : 'present');
+          line.append(el('strong', '', kinds[kind]), el('span', '', label));
+          group.append(line);
+        }
+        card.append(group);
+      }
+
+      function showQuote(card, quote, currentVersion = true) {
+        if (!quote) return;
+        const section = el('section', 'evidence-note');
+        section.setAttribute('aria-label', 'Quote check for ' + quote.name);
+        const version = Number.isInteger(quote.version) ? 'Version ' + quote.version + ' · ' : '';
+        section.append(el('strong', '', version + quoteStatus(quote)), el('p', '', quote.reason));
+        const citation = quote.name + (quote.page ? ' · page ' + quote.page : '');
+        section.append(el('small', 'citation', citation));
+        if (quote.source === 'garage') section.append(el('small', 'citation', 'Received from garage'));
+        if (quote.status === 'verified' && typeof quote.amount_eur === 'number') {
+          const total = new Intl.NumberFormat('en-IE', {style: 'currency', currency: 'EUR'}).format(quote.amount_eur);
+          section.append(el('p', '', 'Itemized total · ' + total));
+        }
+        if (currentVersion && quote.garage_request && quote.status === 'needs_clarification') {
+          section.append(el('p', '', quote.garage_request));
+          const copy = button('Copy request for garage', 'quiet', () => copyText(quote.garage_request, copy));
+          section.append(copy);
+        }
+        card.append(section);
+      }
+
+      function showNotes(card, docs, incidentDate) {
+        for (const doc of docs) {
+          if (!doc.translation && !doc.assistance) continue;
+          const panel = el('section', 'evidence-note');
+          panel.append(el('strong', '', doc.name));
+          if (doc.assistance) ClaimAssistance.photoDetails(panel, doc, incidentDate);
+          if (doc.translation) ClaimAssistance.translationReview(panel, doc.translation);
+          card.append(panel);
+        }
+      }
+
+      function fileList(card, docs, allowChanges) {
+        if (!docs.length) return;
+        const list = el('ul', 'files');
+        list.setAttribute(
+          'aria-label',
+          allowChanges ? 'Attachments to send' : 'Received attachments'
+        );
+        docs.forEach((doc, index) => {
+          const li = el('li', 'file');
+          if (doc.content_base64 && /\.(png|jpe?g)$/i.test(doc.name)) li.append(previewImage(doc));
+          const info = el('div', 'file-info');
+          info.append(
+            el('small', '', kinds[doc.kind]),
+            el('span', '', doc.name)
+          );
+          li.append(info);
+          if (allowChanges) {
+            const actions = el('div', 'file-buttons');
+            if (doc.kind === 'damage_photo') {
+              fileButton(
+                actions,
+                'Retake',
+                'retake-' + index,
+                'image/*',
+                (add) => addFiles(add, 'damage_photo', index),
+                { camera: true, style: 'quiet' }
+              );
+            }
+            const remove = button('Remove', 'quiet', () => {
+              files.splice(index, 1);
+              render(false);
+            });
+            remove.setAttribute('aria-label', 'Remove ' + doc.name);
+            actions.append(remove);
+            li.append(actions);
+          }
+          list.append(li);
+          if (allowChanges && doc.kind === 'itemized_quote' && doc.assessment)
+            showQuote(li, doc.assessment, !docs.slice(index + 1).some((d) => d.kind === doc.kind));
+          if (allowChanges && doc.kind === 'damage_photo') {
+            const details = el('div', 'photo-detail');
+            ClaimAssistance.photoDetails(details, doc, values.incident_date, (note) => {
+              doc.assistance = note;
+            });
+            li.append(details);
+          }
+        });
+        card.append(list);
+      }
+
+      function followupKinds() {
+        const kinds = new Set(receipt.missing_documents);
+        if (receipt.evidence) kinds.add('itemized_quote');
+        return [...kinds].filter((kind) => !files.some((doc) => doc.kind === kind));
+      }
+
+      async function addFiles(list, kind, replaceIndex, view = '') {
+        try {
+          if (receipt) {
+            if (
+              !followupKinds().includes(kind) ||
+              list.length !== 1
+            ) {
+              throw new Error('Choose one file for each outstanding document.');
+            }
+          } else if (
+            files.length + list.length - (replaceIndex === undefined ? 0 : 1) >
+            maxFiles
+          ) {
+            throw new Error(
+              'Choose up to 4 files for the initial claim. Remove a file before choosing another.'
+            );
+          }
+          setBusy(true);
+          status(kind === 'itemized_quote' ? 'Reading the repair estimate…' : 'Preparing the attachment…');
+          const docs = await Promise.all(
+            list.map(async (file, i) => {
+              const doc = await encodeFile(file, kind);
+              if (kind === 'itemized_quote') await assessQuote(doc);
+              if (kind === 'damage_photo') {
+                const retainedView = replaceIndex === undefined ? view : files[replaceIndex]?.assistance?.view;
+                doc.assistance = {view: i === 0 ? retainedView || '' : '',
+                  exif_date: await ClaimAssistance.photoCaptureDate(file),
+                  manual_date: '', explanation: ''};
+              }
+              return doc;
+            })
+          );
+          if (replaceIndex === undefined) files.push(...docs);
+          else files.splice(replaceIndex, 1, ...docs);
+          render(false);
+          status('Attachment added.');
+        } catch (err) {
+          showError(err.message);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function uploadControls(card, allDocs) {
+        if (!receipt && allDocs.length >= maxFiles) {
+          card.append(
+            el('p', 'file-hint', 'All four initial attachment slots are used.')
+          );
+          return;
+        }
+        const outstanding = receipt ? followupKinds() : [];
+        if (receipt && !outstanding.length) return;
+        const group = el('div', 'upload-controls');
+        const label = el('label', 'label', 'Paperwork type');
+        label.htmlFor = 'document-kind';
+        const kind = receipt ? el('select') : kindSelect(false);
+        if (receipt)
+          outstanding.forEach((key) => {
+            const revised = key === 'itemized_quote' && receipt.documents.some((d) => d.kind === key);
+            kind.add(new Option(revised ? 'Revised itemized repair quote' : kinds[key], key));
+          });
+        kind.id = 'document-kind';
+        kind.value = receipt
+          ? outstanding[0]
+          : requiredKinds.find((k) => !(demoCase && k === 'incident_report') && !allDocs.some((doc) => doc.kind === k)) ||
+            requiredKinds[0];
+        group.append(label, kind);
+        const buttons = el('div', 'actions');
+        fileButton(
+          buttons,
+          'Attach paperwork',
+          'doc-files',
+          '.pdf,.jpg,.jpeg,.png',
+          (list) => addFiles(list, kind.value),
+          { multiple: !receipt }
+        );
+        group.append(buttons);
+        if (receipt) {
+          group.append(
+            el('p', 'file-hint', receipt.evidence ? 'JPEG and PNG up to 12 MiB. PDF up to 2 MiB.' : 'PDF, JPEG or PNG · up to 2 MiB per file')
+          );
+          card.append(group);
+          return;
+        }
+        const photoLabel = el('p', 'label', 'Damage photos');
+        const guide = el('div');
+        ClaimAssistance.photoGuide(guide);
+        const viewLabel = el('label', 'label', 'Next photo');
+        const view = el('select');
+        view.id = 'next-photo-view';
+        viewLabel.htmlFor = view.id;
+        view.add(new Option('Wide shot', 'wide'));
+        view.add(new Option('Damage close-up', 'close_up'));
+        view.add(new Option('Other photo', ''));
+        const views = allDocs.map((doc) => doc.assistance?.view);
+        view.value = !views.includes('wide') ? 'wide' : !views.includes('close_up') ? 'close_up' : '';
+        const photos = el('div', 'choices photo-actions');
+        fileButton(
+          photos,
+          'Take a photo',
+          'camera-file',
+          'image/*',
+          (list) => addFiles(list, 'damage_photo', undefined, view.value),
+          { camera: true }
+        );
+        fileButton(
+          photos,
+          'Choose from gallery',
+          'gallery-files',
+          'image/jpeg,image/png',
+          (list) => addFiles(list, 'damage_photo', undefined, view.value),
+          { multiple: true }
+        );
+        group.append(
+          photoLabel, guide, viewLabel, view, photos,
+          el('p', 'file-hint', 'JPEG and PNG up to 12 MiB each. PDF up to 2 MiB.')
+        );
+        card.append(group);
+      }
+
+      function drawDocuments(card) {
+        heading(
+          card,
+          'Which documents can you attach?',
+          'You can submit now and use your private link to add missing paperwork later.'
+        );
+        if (demoCase) sampleQuotes(card);
+        checklist(card, files);
+        fileList(card, files, true);
+        uploadControls(card, files);
+        const actions = el('div', 'actions');
+        actions.append(
+          button('Review claim', 'primary', () => setStep(reviewStep)),
+          button('Back', 'quiet', () =>
+            setStep(editing ? reviewStep : fields.length - 1)
+          )
+        );
+        card.append(actions);
+      }
+
+      function evidenceSource(field) {
+        const source = sources[field.key];
+        if (!source) return 'Provided by you';
+        const translation = field.key === 'description' && files.find((doc) =>
+          doc.name === source.name && doc.translation?.confirmed && doc.translation.english === values.description);
+        return (translation ? 'Confirmed English translation of ' : 'Imported from ') + sourceLabel(source);
+      }
+
+      function drawReview(card) {
+        heading(
+          card,
+          'Ready to submit your claim?',
+          'Check your answers and attachments. Submitting sends them to the claims team.'
+        );
+        const list = el('dl', 'review');
+        fields.forEach((field, i) => {
+          const item = row(field.label, labelValue(field), () =>
+            setStep(i, true)
+          );
+          item
+            .querySelector('div')
+            .append(
+              el(
+                'small',
+                'citation',
+                evidenceSource(field)
+              )
+            );
+          list.append(item);
+        });
+        list.append(
+          row(
+            'Documents',
+            files.map((doc) => doc.name).join('\n') || 'No documents attached',
+            () => setStep(docsStep, true)
+          )
+        );
+        card.append(list);
+        checklist(card, files);
+        const quotes = files.filter((doc) => doc.kind === 'itemized_quote');
+        quotes.forEach((doc, i) => showQuote(card, doc.assessment, i === quotes.length - 1));
+        showNotes(card, files, values.incident_date);
+        const actions = el('div', 'actions');
+        actions.append(button('Submit claim', 'primary', submitClaim));
+        card.append(actions);
+      }
+
+      function captureInput() {
+        const input = current.querySelector('#answer');
+        if (input) partialAnswer = input.value;
+      }
+
+      function saveDraft() {
+        if (!interceptFilingQuestion(current.querySelector('#answer'), persistDraft))
+          persistDraft();
+      }
+
+      function persistDraft() {
+        const previousAnswer = fields[step]
+          ? values[fields[step].key] || partialAnswer
+          : '';
+        captureInput();
+        const draftValues = { ...values };
+        const draftSources = { ...sources };
+        if (step >= 0 && step < docsStep && fields[step].type !== 'choice') {
+          draftValues[fields[step].key] = partialAnswer;
+          if (partialAnswer !== previousAnswer)
+            delete draftSources[fields[step].key];
+        }
+        sendOperation('save-draft', {
+          token: privateToken(),
+          expected_revision: revision,
+          evidence_version: 1,
+          draft: {
+            ...(demoCase ? {demo_case: demoCase} : {}),
+            values: draftValues,
+            notes: attachmentNotes(files),
+            documents: files.map(attachmentBody),
+            sources: draftSources,
+            step
+          }
+        });
+      }
+
+      function submitClaim() {
+        if (!requestId) requestId = uid();
+        sendOperation('submit', {
+          token: privateToken(),
+          expected_revision: revision,
+          evidence_version: 1,
+          payload: {...values, request_id: requestId,
+            ...(demoCase ? {demo_case: demoCase} : {}),
+            notes: attachmentNotes(files), documents: files.map(attachmentBody)}
+        });
+      }
+
+      async function sendOperation(path, body) {
+        if (busy) return;
+        pending = { path, body };
+        setBusy(true);
+        status('Sending…');
+        try {
+          const data = await api(path, body);
+          if (path === 'save-draft') {
+            if (data.status !== 'draft' || !Number.isInteger(data.revision))
+              throw new Error('Incomplete draft receipt.');
+            revision = data.revision;
+            saveNotice = true;
+            history.replaceState(null, '', privateURL());
+          } else {
+            acceptReceipt(data);
+            history.replaceState(null, '', privateURL());
+          }
+          pending = null;
+          conflict = false;
+          render(path !== 'save-draft');
+          status(path === 'save-draft' ? 'Draft saved.' : 'Receipt updated.');
+        } catch (err) {
+          if ([400, 404, 409, 413, 415, 422].includes(err.status)) {
+            pending = null;
+            conflict = err.status === 409;
+          }
+          render(false);
+          showError(
+            pending
+              ? 'Your connection was interrupted. Retry to confirm what was saved.'
+              : err.message
+          );
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function acceptReceipt(data) {
+        if (
+          data.status !== 'submitted' ||
+          typeof data.reference !== 'string' ||
+          !Array.isArray(data.documents) ||
+          !Array.isArray(data.missing_documents) ||
+          data.documents.length !== data.document_count
+        )
+          throw new Error('Could not confirm the receipt.');
+        values = {};
+        files = [];
+        sources = {};
+        importResult = importFile = null;
+        partialAnswer = '';
+        receipt = data;
+        demoCase = data.evidence?.demo_case || null;
+        step = receiptStep;
+        saveNotice = false;
+        editing = false;
+      }
+
+      function drawReceipt(card) {
+        heading(
+          card,
+          'Claim received',
+          'Keep your reference and private follow-up link.'
+        );
+        card.append(el('p', 'reference', receipt.reference));
+        const copy = button('Copy reference', 'quiet', () =>
+          copyText(receipt.reference, copy)
+        );
+        card.append(copy);
+        const summary = el('div');
+        summary.id = 'receipt-evidence';
+        receiptSummary(summary);
+        card.append(summary);
+        const evidence = receipt.evidence;
+        if (evidence) {
+          const share = el('section', 'link-panel garage-share');
+          share.id = 'garage-share';
+          share.setAttribute('aria-label', 'Garage request');
+          card.append(share);
+          garagePanel();
+        }
+        linkPanel(card, 'Private follow-up link');
+        if (receipt.missing_documents.length || evidence) {
+          const details = el('details', 'follow-up');
+          details.open = files.length > 0;
+          details.append(el('summary', '', 'Add documents to this claim'));
+          fileList(details, files, true);
+          uploadControls(details, [...receipt.documents, ...files]);
+          if (files.length) {
+            const send = button('Send additional documents', 'primary', () =>
+              sendOperation('add-documents', {
+                token,
+                request_id: uid(),
+                ...(evidence ? {evidence_version: 1, notes: attachmentNotes(files)} : {}),
+                documents: files.map(attachmentBody)
+              })
+            );
+            details.append(send);
+          }
+          card.append(details);
+        }
+        card.append(button('Report another claim', 'quiet', fresh));
+      }
+
+      function receiptSummary(card) {
+        card.append(
+          el('h3', '', 'Files received (' + receipt.document_count + ')')
+        );
+        fileList(card, receipt.documents, false);
+        const evidence = receipt.evidence;
+        if (evidence?.next_action) {
+          const next = el('section', 'evidence-note');
+          next.setAttribute('aria-label', 'Who acts next');
+          next.append(el('h3', '', 'Who acts next'),
+            el('strong', '', {garage: 'Garage', claimant: 'You', claims_team: 'Claims team',
+                reviewer: 'Claims reviewer'}[evidence.next_action.owner] || evidence.next_action.owner),
+            el('p', '', evidence.next_action.message));
+          if (receipt.documents.length)
+            next.append(el('p', 'file-hint', 'Already received: ' + receipt.documents.map((doc) => doc.name).join(', ') + '.'));
+          card.append(next);
+          const quotes = evidence.quotes || [];
+          quotes.forEach((quote, i) => showQuote(card, quote, i === quotes.length - 1));
+          if (demoCase === 'DEV-003') {
+            const reviewer = el('a', 'sample', 'Open reviewer evidence');
+            reviewer.href = '/reviewer/evidence?reference=' + encodeURIComponent(receipt.reference);
+            card.append(reviewer);
+            sampleQuotes(card);
+          }
+        }
+        const missing = receipt.missing_documents.map((k) => kinds[k] || k);
+        if (!evidence?.next_action) card.append(
+          el(
+            'p',
+            'file-hint',
+            missing.length
+              ? 'Still needed: ' + missing.join(', ') + '.'
+              : 'All requested paperwork has been received.'
+          )
+        );
+      }
+
+      function quoteCount() {
+        return receipt?.evidence?.quotes?.length || 0;
+      }
+
+      const garageProjector = document.getElementById('garage-projector');
+      const projectedCode = document.getElementById('projected-code');
+      const projectedLink = document.getElementById('projected-garage-link');
+      garageProjector.addEventListener('close', () => {
+        projectedCode.removeAttribute('src');
+        projectedLink.removeAttribute('href');
+        if (document.activeElement === document.body)
+          document.querySelector('#garage-share button')?.focus();
+      });
+
+      function garagePanel() {
+        const panel = document.getElementById('garage-share');
+        if (!panel) return;
+        panel.replaceChildren();
+        const quotes = receipt.evidence.quotes || [];
+        const photoUnderReview = quotes[quotes.length - 1]?.review_required;
+        panel.append(el('h3', '', photoUnderReview ? 'Garage follow-up' : 'Request an itemized quote'));
+        const request = garageRequest;
+        const updated = request && quoteCount() > request.quoteCount;
+        const valid = request && Date.now() < request.expires;
+        if (request && valid && !updated) {
+          panel.append(el('p', '', 'Share this code or link with the garage. It lets them send one quote as a photo or PDF directly to this claim.'));
+          const qr = el('img');
+          qr.alt = 'Scan to send a garage quote';
+          qr.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(request.qr);
+          const link = el('input');
+          link.readOnly = true;
+          link.value = request.url;
+          link.setAttribute('aria-label', 'Garage upload link');
+          link.addEventListener('focus', () => link.select());
+          const enlarge = button('Enlarge QR code', '', () => {
+            projectedCode.src = qr.src;
+            projectedLink.href = link.value;
+            garageProjector.showModal();
+          });
+          enlarge.setAttribute('aria-haspopup', 'dialog');
+          const copy = button('Copy garage link', '', () => copyText(request.url, copy));
+          panel.append(qr, enlarge, link, copy, el('p', 'file-hint',
+            'Expires ' + new Date(request.expires).toLocaleString() + '. Waiting for the garage quote…'));
+        } else {
+          if (garageProjector.open) garageProjector.close();
+          if (request) panel.append(el('p', '', updated ? 'A revised quote was received.' : 'The previous upload link expired.'));
+          panel.append(el('p', '', photoUnderReview
+            ? 'The claims team has the photo. You can request a link if the garage prepares a different estimate.'
+            : 'Let your garage send a revised quote using a separate upload link.'));
+          const label = photoUnderReview ? 'Request a revised quote (optional)' : 'Request breakdown from garage';
+          const ask = button(issuingGarageLink ? 'Preparing link…' : label, photoUnderReview ? '' : 'primary', requestGarageLink);
+          ask.disabled = issuingGarageLink;
+          panel.append(ask);
+        }
+        panel.append(button('Refresh receipt', 'quiet', () => refreshReceipt(true)));
+      }
+
+      async function requestGarageLink() {
+        if (issuingGarageLink || !receipt?.evidence) return;
+        const original = receipt.reference;
+        const versions = quoteCount();
+        issuingGarageLink = true;
+        garagePanel();
+        showError('');
+        try {
+          const data = await api('garage-link', {token});
+          if (receipt?.reference !== original) return;
+          const url = new URL(data.url, location.origin);
+          const expires = Date.parse(data.expires_at);
+          if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password ||
+              url.pathname !== '/garage' || url.search || !/^#upload=[^&]+$/.test(url.hash) ||
+              typeof data.qr_svg !== 'string' || !data.qr_svg.includes('<svg') || !Number.isFinite(expires))
+            throw new Error('Could not prepare the garage upload link.');
+          garageRequest = {url:url.href, qr:data.qr_svg, expires, quoteCount:versions};
+          status('Garage upload link ready.');
+        } catch (error) {
+          if (receipt?.reference === original) showError(error.message);
+        } finally {
+          issuingGarageLink = false;
+          garagePanel();
+        }
+      }
+
+      async function refreshReceipt(manual = false) {
+        if (!receipt?.evidence || checkingReceipt || busy || pending || conflict) return;
+        const initial = receipt;
+        checkingReceipt = true;
+        try {
+          const next = await api('resume', {token, evidence_version:1});
+          if (receipt !== initial || busy || pending || conflict) return;
+          if (next.status !== 'submitted' || next.reference !== initial.reference ||
+              !next.evidence || !Array.isArray(next.documents) || !Array.isArray(next.missing_documents) ||
+              next.document_count !== next.documents.length)
+            throw new Error('Could not confirm the latest receipt.');
+          if (next.document_count > initial.document_count) {
+            receipt = next;
+            const summary = document.getElementById('receipt-evidence');
+            if (summary) { summary.replaceChildren(); receiptSummary(summary); }
+            garagePanel();
+            status('New paperwork received.');
+          } else if (manual) status('The receipt is up to date.');
+          if (manual) showError('');
+        } catch {
+          if (manual && receipt === initial) showError('Could not refresh the receipt. Try again.');
+        } finally {
+          checkingReceipt = false;
+        }
+      }
+
+      function checkWaitingReceipt() {
+        if (document.hidden || !receipt?.evidence) return;
+        if (garageRequest && !garageRequest.expired && Date.now() >= garageRequest.expires) {
+          garageRequest.expired = true;
+          garagePanel();
+        }
+        if ((garageRequest && !garageRequest.expired && quoteCount() <= garageRequest.quoteCount) ||
+            receipt.evidence.next_action?.owner === 'garage') refreshReceipt();
+      }
+
+      window.setInterval(checkWaitingReceipt, 5000);
+      document.addEventListener('visibilitychange', checkWaitingReceipt);
+
+      async function copyText(text, action) {
+        try {
+          await navigator.clipboard.writeText(text);
+          status('Copied.');
+          action.textContent = 'Copied';
+        } catch {
+          const copyBox = el('input');
+          copyBox.readOnly = true;
+          copyBox.value = text;
+          copyBox.setAttribute('aria-label', 'Select and copy');
+          action.after(copyBox);
+          copyBox.select();
+          status('Select and copy the text.');
+        }
+      }
+
+      function linkPanel(card, title) {
+        const panel = el('div', 'link-panel');
+        panel.append(
+          el('strong', '', title),
+          el(
+            'p',
+            'file-hint',
+            'Anyone with this link can open it. Keep it private.'
+          )
+        );
+        const input = el('input');
+        input.type = 'text';
+        input.readOnly = true;
+        input.value = privateURL();
+        input.setAttribute('aria-label', title);
+        input.addEventListener('focus', () => input.select());
+        const copy = button('Copy private link', 'quiet', () =>
+          copyText(privateURL(), copy)
+        );
+        panel.append(input, copy);
+        card.append(panel);
+      }
+
+      function fresh() {
+        garageRequest = null;
+        history.replaceState(null, '', location.pathname);
+        demoCase = null;
+        token = '';
+        requestId = '';
+        revision = 0;
+        values = {};
+        sources = {};
+        files = [];
+        receipt = pending = importFile = importResult = null;
+        conflict = false;
+        setStep(welcomeStep);
+      }
+
+      async function resume() {
+        setBusy(true);
+        status('Opening private link…');
+        try {
+          const data = await api('resume', { token, evidence_version: 1 });
+          if (data.status === 'submitted') acceptReceipt(data);
+          else if (
+            data.status === 'draft' &&
+            data.draft &&
+            Number.isInteger(data.revision)
+          ) {
+            revision = data.revision;
+            const draft = data.draft;
+            values = { ...draft.values };
+            sources = { ...draft.sources };
+            files = draft.documents;
+            restoreNotes(files, draft.notes);
+            demoCase = draft.demo_case || null;
+            await Promise.all(files.filter((doc) => doc.kind === 'itemized_quote').map(assessQuote));
+            step = draft.step;
+            partialAnswer = '';
+            if (
+              step >= 0 &&
+              step < docsStep &&
+              fields[step].type !== 'choice'
+            ) {
+              partialAnswer = values[fields[step].key] || '';
+              delete values[fields[step].key];
+            }
+            if (
+              step < 0 ||
+              step > reviewStep ||
+              (step >= docsStep && nextUnanswered() < docsStep)
+            )
+              step = nextUnanswered();
+            receipt = null;
+          } else throw new Error('Invalid draft receipt.');
+          conflict = false;
+          pending = null;
+          editing = saveNotice = false;
+          render(true);
+          status(
+            data.status === 'submitted'
+              ? 'Claim receipt opened.'
+              : 'Draft opened.'
+          );
+        } catch (error) {
+          current.replaceChildren();
+          const card = el('div', 'card');
+          heading(
+            card,
+            'Couldn’t open this private link',
+            error.status === 404
+              ? 'Check that you copied the complete link.'
+              : 'Check your connection and try again.'
+          );
+          card.append(
+            button('Try again', 'primary', resume),
+            button('Start a new claim', 'quiet', fresh)
+          );
+          current.append(card);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function render(focus) {
+        drawProgress();
+        drawHistory();
+        current.replaceChildren();
+        const card = el('div', 'card');
+        current.append(card);
+        if (pending || conflict) {
+          heading(
+            card,
+            pending
+              ? 'Confirm your last request'
+              : 'Your saved claim has changed',
+            pending
+              ? 'Retry the same request to check whether it reached the claims team.'
+              : 'Open the latest saved version before continuing.'
+          );
+          if (pending)
+            card.append(
+              button('Retry request', 'primary', () =>
+                sendOperation(pending.path, pending.body)
+              )
+            );
+          if (conflict)
+            card.append(button('Open latest saved version', 'primary', resume));
+        } else if (receipt) drawReceipt(card);
+        else if (step === welcomeStep) drawWelcome(card);
+        else if (step === importStep && importResult?.image) drawImageImport(card);
+        else if (step === importStep) drawImport(card);
+        else if (step === docsStep) drawDocuments(card);
+        else if (step === reviewStep) drawReview(card);
+        else drawQuestion(card);
+        const error = el('p', 'error');
+        error.setAttribute('role', 'alert');
+        error.hidden = true;
+        card.append(error);
+        if (!pending && !conflict) {
+          const ask = button('Ask a question', 'quiet ask-link', () =>
+            openFilingHelp(current.querySelector('#answer') || ask)
+          );
+          card.append(ask);
+        }
+        if (!pending && !conflict && step >= 0 && !receipt) {
+          const save = el('div', 'save-bar');
+          save.append(button('Save and continue later', 'quiet', saveDraft));
+          if (saveNotice) linkPanel(save, 'Draft saved · private resume link');
+          card.append(save);
+        }
+        if (focus) {
+          card.querySelector('h2')?.focus({ preventScroll: true });
+          card.scrollIntoView({ block: 'nearest' });
+        }
+      }
+
+      window.addEventListener('hashchange', () => location.reload());
+      render(false);
+      if (location.hash) {
+        const match = /^#claim=([0-9a-f]{64})$/.exec(location.hash);
+        if (match) {
+          token = match[1];
+          resume();
+        } else
+          showError(
+            'This link is incomplete. Open the full private link or start a new claim.'
+          );
+      }
+    </script>
+  </body>
+</html>

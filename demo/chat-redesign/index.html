@@ -70,7 +70,7 @@
     .column { max-width: 810px; width: 100%; margin: 0 auto; padding-inline: clamp(16px, 4vw, 40px); }
 
     .welcome { padding-block: clamp(32px, 9vh, 96px) 28px; }
-    h1 { font-size: clamp(36px, 5.5vw, 56px); margin: 10px 0 0; }
+    h1 { font-size: clamp(36px, 5.5vw, 56px); margin: 10px 0 28px; }
     .intro { margin: 12px 0 28px; color: var(--muted-foreground); font-size: clamp(15px, 1.6vw, 17px); max-width: 52ch; }
     .starters { display: grid; gap: 8px; }
     .starter { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 15px; border-radius: 12px; padding: 14px 16px; text-align: left; }
@@ -145,7 +145,6 @@
       <section class="welcome" id="welcome">
         <span class="eyebrow" style="border:0;padding:0">Claims review</span>
         <h1>Ask about a claim.</h1>
-        <p class="intro">Trace a recommendation to the case facts and the policy that applies.</p>
         <div class="starters" id="starters" aria-label="Suggested questions"></div>
       </section>
       <section class="conversation" id="transcript" aria-label="Conversation" hidden></section>
