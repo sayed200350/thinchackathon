@@ -268,6 +268,10 @@ def extract_pdf(body):
     kind, suggestions = _suggestions(text)
     result['document_kind'] = kind
     result['suggestions'] = suggestions
+    from .claim_assistance import report_translation
+    translation = report_translation(text,suggestions,kind)
+    if translation:
+        result['translation'] = translation
     if scanned:
         result['notice'] = ('Suggestions come from an optical scan of the first two pages. Check the spelling and numbers.'
                             if suggestions else 'No labelled details could be read on the first two scanned pages. Enter your answers.')

@@ -34,7 +34,7 @@ def _text(value, field, minimum, maximum):
     return text
 
 
-def _validate_document(doc):
+def _validate_document(doc, *, enhanced=False):
     if not isinstance(doc, dict) or set(doc) != {'kind', 'name', 'content_base64'}:
         raise RequestError(400, 'Each attachment needs a kind, filename and file contents.')
     if doc['kind'] not in DOCUMENT_KINDS:
@@ -47,21 +47,23 @@ def _validate_document(doc):
     if signature is None:
         raise RequestError(400, 'Attach a PDF, PNG or JPEG file.')
 
+    large_photo = enhanced and doc['kind'] == 'damage_photo' and extension.lower() in ('png', 'jpg', 'jpeg')
+    maximum = 12 * 1024 * 1024 if large_photo else MAX_FILE_BYTES
     encoded = doc['content_base64']
-    if not isinstance(encoded, str) or not 0 < len(encoded) <= 4 * ((MAX_FILE_BYTES + 2) // 3):
-        raise RequestError(400, 'Each attachment must contain a file of at most 2 MiB.')
+    if not isinstance(encoded, str) or not 0 < len(encoded) <= 4 * ((maximum + 2) // 3):
+        raise RequestError(400, f'Each attachment must contain a file of at most {maximum // (1024*1024)} MiB.')
     try:
         content = base64.b64decode(encoded, validate=True)
     except (binascii.Error, ValueError):
         raise RequestError(400, 'The attachment could not be decoded.') from None
-    if len(content) > MAX_FILE_BYTES or base64.b64encode(content).decode('ascii') != encoded:
-        raise RequestError(400, 'Use a valid base64 attachment of at most 2 MiB.')
+    if len(content) > maximum or base64.b64encode(content).decode('ascii') != encoded:
+        raise RequestError(400, f'Use a valid base64 attachment of at most {maximum // (1024*1024)} MiB.')
     if not content.startswith(signature):
         raise RequestError(400, 'The file contents and extension must match.')
     return {'kind': doc['kind'], 'name': name, 'content_base64': encoded}
 
 
-def validate_intake(body):
+def validate_intake(body, *, enhanced=False):
     if not isinstance(body, dict) or set(body) != FORM_FIELDS:
         raise RequestError(400, 'Provide the claim details and an attachment list.')
     request_id = body['request_id']
@@ -87,9 +89,10 @@ def validate_intake(body):
         raise RequestError(400, 'Choose yes, no or unknown for injuries.')
     normalized['injury_status'] = body['injury_status']
     docs = body['documents']
-    if not isinstance(docs, list) or len(docs) > 3:
-        raise RequestError(400, 'Attach up to three documents.')
-    normalized['documents'] = [_validate_document(doc) for doc in docs]
+    limit = 4 if enhanced else 3
+    if not isinstance(docs, list) or len(docs) > limit:
+        raise RequestError(400, 'Attach up to four documents.' if enhanced else 'Attach up to three documents.')
+    normalized['documents'] = [_validate_document(doc, enhanced=enhanced) for doc in docs]
     return normalized
 
 
@@ -135,7 +138,7 @@ def save_intake_sqlite(db, payload):
         return write_intake_sqlite(db, payload)
 
 
-def write_intake_sqlite(db, payload):
+def write_intake_sqlite(db, payload, reference=None):
     """Write or replay a validated intake inside the caller's transaction."""
     canonical = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
     digest = hashlib.sha256(canonical).hexdigest()
@@ -145,7 +148,7 @@ def write_intake_sqlite(db, payload):
         if existing[1] != digest:
             raise RequestError(409, 'This request ID already belongs to a different submission.')
         return _receipt(existing[0], payload['documents'])
-    reference = 'CLM-' + str(uuid4())
+    reference = reference or 'CLM-' + str(uuid4())
     db.execute("""INSERT INTO intake_submissions (reference, request_id, payload_hash, description,
                incident_date, location, policy_number, email, injury_status)
                VALUES (:reference, :request_id, :payload_hash, :description, :incident_date,

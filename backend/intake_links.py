@@ -1,6 +1,6 @@
 """Capability-protected claim drafts, submission receipts and additional uploads."""
 import base64
-from contextlib import closing
+from contextlib import closing, contextmanager
 import hashlib
 import json
 import re
@@ -30,13 +30,13 @@ def _revision(value):
         raise RequestError(400, 'A valid draft revision is required.')
 
 
-def _documents(value, minimum=0):
-    if not isinstance(value, list) or not minimum <= len(value) <= 3:
+def _documents(value, minimum=0, *, enhanced=False):
+    if not isinstance(value, list) or not minimum <= len(value) <= (4 if enhanced else 3):
         raise RequestError(400, 'Choose up to three documents.')
-    return [_validate_document(document) for document in value]
+    return [_validate_document(document, enhanced=enhanced) for document in value]
 
 
-def _draft(draft):
+def _draft(draft, *, enhanced=False):
     if not isinstance(draft, dict) or set(draft) != {'values', 'step', 'documents', 'sources'}:
         raise RequestError(400, 'Invalid draft.')
     values, sources, step = draft['values'], draft['sources'], draft['step']
@@ -58,7 +58,7 @@ def _draft(draft):
                 or re.search(r'[/\\\x00-\x1f\x7f-\x9f\ud800-\udfff]', name)
                 or type(page) is not int or not 1 <= page <= 1000):
             raise RequestError(400, 'Invalid source filename or page.')
-    return dict(draft, documents=_documents(draft['documents']))
+    return dict(draft, documents=_documents(draft['documents'], enhanced=enhanced))
 
 
 def initialize_intake_links(path):
@@ -92,6 +92,17 @@ def _rpc(store, action, token, data):
 
 def _row(db, key):
     return db.execute('SELECT * FROM intake_links WHERE token_hash=?', (key,)).fetchone()
+
+
+@contextmanager
+def _read_snapshot(db):
+    """Keep related SELECTs on one snapshot without ending a caller's transaction."""
+    if db.in_transaction:
+        yield
+        return
+    with db:
+        db.execute('BEGIN')
+        yield
 
 
 def _start_write(db, key):
@@ -133,12 +144,13 @@ def resolve_link(store, token):
     key = _key(token)
     if not isinstance(store, sqlite3.Connection):
         return _rpc(store, 'open', token, {})
-    row = _row(store, key)
-    if row is None:
-        raise RequestError(404, 'Private link not found.')
-    if row['reference']:
-        return _receipt(store, row['reference'])
-    return {'status': 'draft', 'revision': row['revision'], 'draft': json.loads(row['draft'])}
+    with _read_snapshot(store):
+        row = _row(store, key)
+        if row is None:
+            raise RequestError(404, 'Private link not found.')
+        if row['reference']:
+            return _receipt(store, row['reference'])
+        return {'status': 'draft', 'revision': row['revision'], 'draft': json.loads(row['draft'])}
 
 
 def submit_linked(store, token, payload, expected_revision=0):
@@ -180,6 +192,12 @@ def append_documents(store, token, request_id, documents):
         reference = row['reference']
         if not reference:
             raise RequestError(409, 'Submit the claim before adding follow-up documents.')
+        # Older standalone intake stores can still lack the optional evidence table.
+        has_evidence_table = store.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='intake_evidence'").fetchone()
+        if has_evidence_table and store.execute(
+                'SELECT 1 FROM intake_evidence WHERE reference=?', (reference,)).fetchone():
+            raise RequestError(409, 'Reopen the private receipt to add evidence.')
         prior = store.execute('SELECT payload_hash FROM intake_addition_requests WHERE reference=? AND request_id=?',
                               (reference, request_id)).fetchone()
         if prior:

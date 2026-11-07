@@ -4,17 +4,33 @@ Taktile track · thinc! hack MUC · 7–8 November 2026
 
 Policy Replay receives motor-insurance claims in a guided conversation. A claimant describes the incident, attaches evidence, checks their answers and receives a claim reference. Reviewers use a separate workspace to explore the fictional Taktile cases and replay policy decisions.
 
-## Report a motor claim
+## Demo the €890 bumper claim
 
-Run `python3 -m backend` from the repository root with Python 3.9+ and open the [claim intake chat](http://127.0.0.1:8765/chat).
+A garage sends a quote for €890. The chatbot reads the total and page, spots the missing breakdown, and gives the driver a request to copy to the garage. The driver submits once. Each new quote then updates the same claim, and the reviewer can show exactly which evidence changed its route.
 
-1. Start with a PDF or describe what happened. For the judges’ demo, download the [fictional accident report](http://127.0.0.1:8765/sample-accident-report.pdf) and import it on the opening screen.
-2. Check the suggested answers against their filename and page. Correct one field, confirm the others, then answer the remaining questions. The claimant supplies the injury information.
-3. Try asking “Can I send the repair quote later?” in a written answer, or choose **Ask a question** at any step. Choose **Back to claim** to return to the unfinished answer. Filing help runs in the browser and requires no model key.
-4. Take a damage photo or choose an image on the phone. The document checklist shows which paperwork is still missing. A claimant can save a draft and reopen the private link on another device that can reach the same server.
-5. Submit the claim. The receipt lists every received filename and the claim reference. Use the private link later to add an outstanding report or itemized quote.
+On macOS, run these commands from the repository root to install the PDF reader and start a local rehearsal.
 
-The backend reads labelled fields from the first 12 text pages using Poppler’s `pdftotext`. For image-only PDFs it can try OCR on the first two pages using `pdftoppm` and Tesseract with English language data. On macOS, `brew install poppler tesseract` installs the readers. Claimants can attach a protected or unreadable file and enter the answers manually. Intake uses no model credentials. The local server listens on loopback. Cross-device links from a published app must point to its reachable HTTPS origin.
+```sh
+brew install poppler
+python3 -m backend --store sqlite
+```
+
+1. Open the [fictional DEV-003 claim](http://127.0.0.1:8765/chat?demo=DEV-003), choose **Start sample claim**, and expand **Download sample garage quotes**. The fictional claim already has an incident report. The ordinary [claim intake](http://127.0.0.1:8765/chat) starts with the claimant’s own facts.
+2. Attach **€890 total only** as an **Itemized repair quote**. Show the page citation and choose **Copy request for garage**. Select **Review claim → Submit claim**. The receipt names the garage as the next actor. Keep the private follow-up link.
+3. Choose **Open reviewer evidence** on the receipt. Use the reference and the reviewer key supplied by the backend operator. For a default local rehearsal, the key is in the ignored file `backend/.local/claim_reviewer_key`. Show version 1 and the engine’s `request_information` decision under rule `v1.2`.
+4. Open the private follow-up link, select **Add documents to this claim**, attach **€890 itemized**, and choose **Send additional documents**. Reopen the reference in the reviewer view. The amount stayed €890, the priced work now reconciles, and version 2 routes to `routine_processing` under `v1.3`. Both originals are available to the reviewer.
+5. Hand the judge the **€1,800 itemized** and **Unreadable total** PDFs. Ask them to pick one and add it through the same private link. The €1,800 quote triggers `human_review` under `v1.1`. An unreadable total stays unknown and requests information under `v1.missing`. The earlier decisions remain in the history.
+
+These routes are triage recommendations. The demo uses DEV-003’s fictional policy and incident facts. Ordinary submissions keep unavailable facts unknown. To rehearse a file without submitting a claim, use **Upload garage quote** in the [reviewer’s fictional replay](http://127.0.0.1:8765/reviewer/evidence).
+
+## Other claimant journeys
+
+- **Import a report.** From [claim intake](http://127.0.0.1:8765/chat) import the [sample accident report](http://127.0.0.1:8765/sample-accident-report.pdf). Check suggested answers against their filename and page. Choose **Ask a question** for filing help and return to the unfinished answer.
+- **File with a German report.** Import the [German sample](http://127.0.0.1:8765/examples/photo-guide/accident-report-de.pdf). Edit and confirm the suggested English or choose **Continue with original German**. The reviewer can see the German text, page and claimant’s choice. The sample uses an offline phrasebook. For other supported German narratives, install the optional local model once with `python3 -m backend.claim_assistance --install-translation`. If a suggestion is unavailable, the claimant can supply English or use the original.
+- **Photograph damage on a phone.** Follow the illustrated wide-shot and close-up examples at **Documents**. Attach up to four initial files. JPEG and PNG damage photos can be up to 12 MiB each. Reports and quotes accept PDF, JPEG or PNG up to 2 MiB each. If the camera date differs from the incident date, add an explanation. If the camera date is absent, supply a date or leave it unknown. The reviewer receives the original file and the separate dates.
+- **Pause and follow up.** Choose **Save and continue later** to reopen answers and attachments with the private draft link. After submission the link shows the receipt and accepts missing paperwork or another quote. A link works on another device when both devices can reach the same HTTPS service.
+
+The PDF importer reads labelled fields on the first 12 text pages. It can try English OCR on the first two pages of an image-only report when `pdftoppm` and Tesseract are installed (`brew install tesseract` adds Tesseract on macOS). Quote verification requires readable PDF text, a printed euro total, and reconciling priced work. The claimant can attach an unreadable document and continue. Claimant documents and translations are processed on the service host.
 
 ## Review the fictional demo cases
 
@@ -30,7 +46,7 @@ To enable models for reviewer questions, set `JEV_API_KEY` and/or `OPENAI_API_KE
 
 ## Hosted database for Lovable
 
-The intake and reviewer API share the Thinc Supabase project. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the publishable key) in the server’s ignored `.env`, then run `python3 -m backend --store supabase`. New claimant submissions and file contents go into private tables. The public demo queue contains fictional examples. [Database setup and staff access](contract/db/README.md)
+The original intake and reviewer API use the Thinc Supabase project. Thinc has the evidence migration and passed its rollback-only database check. To run the hosted path, provision the matching evidence service credential on the API server. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (also accepted as `SUPABASE_ANON_KEY`), then run `python3 -m backend --store supabase`. The public queue contains fictional cases. Real submissions, original files and evidence history use private tables. [Database setup and staff access](contract/db/README.md)
 
 For a rehearsal with a private SQLite copy, run `python3 -m backend --store sqlite`.
 
@@ -73,12 +89,14 @@ The judges’ batch output must use these columns in this order:
 case_id,recommendation_v1,recommendation_v2,needs_recheck,rule_v1,rule_v2,explanation
 ```
 
-## Five-minute demo
+## Five minutes with the judges
 
-1. **0:00–1:00 · Rafik** asks the chat why DEV-002 needs more information. Supply the missing incident report in a hypothetical, expand its clause and show the original decision.
-2. **1:00–2:30 · Rafik and Sayed** preview the official policy change. Rafik opens an affected claim. Sayed explains why its route changed and shows a closed claim that retained its decision.
-3. **2:30–3:30 · Judge** corrects a recommendation and enters a reason. Refresh the page and show the audit history.
-4. **3:30–5:00 · Sayed and Rafik** show before-and-after quality, including changed cases. Rafik adjusts one cost assumption and closes on the effect on payback. Name the next test before rollout.
+| Time | Presenter | What the judges see |
+| --- | --- | --- |
+| 0:00–1:30 | Rafik as the driver | Upload the €890 total-only quote, copy the garage request and submit. |
+| 1:30–2:30 | Sayed as the reviewer | Open the submitted reference, show the original PDF and explain why v1.2 requests the breakdown. |
+| 2:30–3:30 | Rafik | Reopen the same private receipt and send the €890 itemized version. Sayed shows the new v1.3 decision and the earlier version. |
+| 3:30–5:00 | Judge | Choose a high-value or unreadable quote. Predict the route, replay it and inspect the precise change and version history. |
 
 ## Hackathon references
 

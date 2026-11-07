@@ -4,8 +4,8 @@ Policy Replay runs in the free **Thinc** organization, project `bdbvfcfmlhpfefdt
 
 - [Supabase project dashboard](https://supabase.com/dashboard/project/bdbvfcfmlhpfefdtrbkd)
 - [Hosted Table Editor](https://supabase.com/dashboard/project/bdbvfcfmlhpfefdtrbkd/editor)
-- **Project URL:** `https://bdbvfcfmlhpfefdtrbkd.supabase.co`
-- **Browser key:** In the project overview, choose **Copy project URL and API keys → Copy Publishable key**. Use the existing `sb_publishable_…` key.
+- **Project URL** · `https://bdbvfcfmlhpfefdtrbkd.supabase.co`
+- **Browser key** · In the project overview, choose **Copy project URL and API keys → Copy Publishable key**. Use the existing `sb_publishable_…` key.
 
 ## Connect Lovable
 
@@ -38,6 +38,33 @@ Apply [intake_links.sql](intake_links.sql) after the intake schema to enable sav
    ```
 
 The hosted setup was checked on 7 November 2026. The browser-role test returned 26 decisions, 14 matching development labels and two closed cases. Readback through the Data API confirmed 24 open cases and zero saved overrides immediately after setup. No v2 expectations have been imported. Sayed maintains the validation labels after the official update, using independent expected outcomes reviewed with Rafik.
+
+## Install private evidence storage
+
+The evidence build adds quote version history, original photo dates, claimant explanations and translation choices. The browser continues to use the Python intake API. The publishable Supabase key alone grants no access to these private tables or submitted files.
+
+1. Verify that [claim_intake.sql](claim_intake.sql) and [intake_links.sql](intake_links.sql) have been applied to the target database. For an existing Thinc installation, keep its seed data, submissions and private links. The evidence migration is a separate transaction.
+2. Run the setup command from the repository root on the backend host, or with the same exported `CLAIM_EVIDENCE_SERVICE_KEY` the deployed server will use.
+
+   ```sh
+   python3 -m backend.evidence_setup --sql-output /tmp/thinc-evidence.sql
+   ```
+
+   With no exported credentials, the command creates or reuses two private files in ignored `backend/.local/`. The `claim_evidence_service_key` file is for the Python service. The `claim_reviewer_key` file is for authorized staff opening a submitted case. Alternatively supply `CLAIM_EVIDENCE_SERVICE_KEY` and `CLAIM_REVIEWER_KEY` as persistent server secrets of at least 32 characters each. The setup command reads exported environment variables. The HTTP service also reads its configured `.env`. Use the same evidence service credential in both processes. Keep the original credential available across restarts and across server instances.
+
+3. Inspect the generated `/tmp/thinc-evidence.sql` and run that generated copy in the target project’s SQL Editor. Its source is [claim_evidence.sql](claim_evidence.sql). Generation replaces `__SERVICE_KEY_SHA256__` with the SHA-256 verifier. The SQL creates private evidence tables with row-level security, adjusts the allowable file sizes and positions, and installs the credential-checked `claim_evidence_io` function. It preserves original document rows. A repeated migration with a different verifier raises an error and rolls back.
+4. In the target project’s SQL Editor, run [claim_evidence_checks.sql](claim_evidence_checks.sql). It temporarily uses a test verifier inside one transaction, checks that the browser role cannot read private tables or use the wrong credential, then submits, appends, retries, reopens, and retrieves both original byte sequences. The script rolls back all changes and prints a pass message.
+5. On a **disposable PostgreSQL database** with the Supabase roles and all three intake migrations installed, run the parity test. The test connects using `CLAIM_TEST_PG_DSN`, impersonates `anon`, and exercises the real SQL function using the matching exported `CLAIM_EVIDENCE_SERVICE_KEY`. It creates a synthetic claim and two quote versions.
+
+   ```sh
+   python3 -m unittest backend.tests.test_evidence_postgres -v
+   ```
+
+6. Start the application against the intended project with `python3 -m backend --store supabase`. Verify with a fictional claim that the private receipt survives reopening, staff can download both PDF versions, and an incorrect reviewer key returns 403. Use only fictional data for the rehearsal.
+
+On 7 November 2026, Thinc applied this migration and passed the rollback-only SQL check under the anonymous browser role. The test rows were rolled back.
+
+The enhanced claimant path accepts four initial attachments, preserves JPEG and PNG damage photos up to 12 MiB each and caps other files at 2 MiB each. A claim can hold up to 40 files including later paperwork. Submitted links return receipt details and next-action guidance. Staff retrieve original attachments using a reference and the reviewer key. The project URL and publishable key may be used by the Lovable frontend. Keep the evidence service credential on the backend. [HTTP contract](../api.md)
 
 ## Find a submitted claim and its documents
 

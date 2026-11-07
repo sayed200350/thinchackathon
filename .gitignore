@@ -5,6 +5,7 @@
 __pycache__/
 node_modules/
 .venv/
+.evidence-keys/
 .env
 .env.*
 !.env.example
