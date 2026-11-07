@@ -1,8 +1,8 @@
 # Team-Regeln (A + B)
 
-Mehrere Personen (aktuell A, B und C, siehe areas.md) arbeiten parallel, jede auf ihrem eigenen Rechner mit einem eigenen Claude Code Agent Team. Abstimmung läuft ausschließlich über Git. Kommunikation ist **mäßig**: nur wenn nötig, kurz und gebündelt.
+Sayed (A) und Rafik (B) arbeiten parallel mit je einem Agent-Team. Frühere Einträge zu C dokumentieren die alte Aufteilung. Abstimmung läuft ausschließlich über Git. Kommunikation ist **mäßig**: nur wenn nötig, kurz und gebündelt.
 
-Ordnerbesitz: siehe [areas.md](areas.md). Identität: `TEAM_PERSON` in `.claude/settings.local.json` (setzen mit `/join <PERSON>`, z. B. `/join C`).
+Ordnerbesitz: siehe [areas.md](areas.md). Identität: `TEAM_PERSON` in `.claude/settings.local.json` (setzen mit `/join <PERSON>`, z. B. `/join A`).
 
 ## Gateway
 - Pro Person kommuniziert **nur der Team Lead** nach außen, also mit den anderen Personen. Teammates reden untereinander über die lokale Agent-Team-Mailbox und schreiben **nie** in `team/inbox/`. Braucht ein Teammate etwas von einer anderen Person, meldet er es seinem Lead.
@@ -11,7 +11,7 @@ Ordnerbesitz: siehe [areas.md](areas.md). Identität: `TEAM_PERSON` in `.claude/
 
 ## Mäßige Kommunikation
 - Jede Nachricht hat **genau einen Empfänger**.
-- Eine Nachricht **an alle** ist nur bei Änderungen in `contract/` erlaubt. Sie landet als Kopie (gleicher Inhalt, gleicher Dateiname) in jeder Inbox außer der eigenen; `An:` lautet dann `alle`.
+- Eine Nachricht **an alle** ist nur bei Änderungen in `contract/` erlaubt. Sie landet als Kopie (gleicher Inhalt, gleicher Dateiname) in der Inbox der anderen aktiven Person; `An:` lautet dann `alle`.
 - Eine Nachricht an eine andere Person gibt es nur bei:
   - Änderung in `contract/`
   - Blocker, der eine andere Person braucht
@@ -35,7 +35,7 @@ Ordnerbesitz: siehe [areas.md](areas.md). Identität: `TEAM_PERSON` in `.claude/
 - Jede Person arbeitet nur in ihren eigenen Ordnern (siehe areas.md).
 - Commit-Format: `[<PERSON>/<agent>] Beschreibung`, z. B. `[A/A-engine] v1-Regeln implementiert`.
 - Bei einem Konflikt in fremden Ordnern **nie** die Version einer anderen Person überschreiben. Stattdessen eigene Änderung dort verwerfen und eine Nachricht schicken.
-- Agent-Namen: `<PERSON>-lead` bzw. `<PERSON>-<rolle>` (z. B. `A-lead`, `B-ui`, `C-api`).
+- Agent-Namen: `<PERSON>-lead` bzw. `<PERSON>-<rolle>` (z. B. `A-lead`, `B-ui`, `A-api`).
 
 ## Struktur
 
@@ -44,13 +44,10 @@ team/README.md            diese Regeln
 team/areas.md             Ordnerbesitz von A und B
 team/status/A.md          aktueller Stand von A, nur A schreibt
 team/status/B.md          aktueller Stand von B, nur B schreibt
-team/status/C.md          aktueller Stand von C, nur C schreibt
 team/inbox/A/             Nachrichten an A, eine Datei pro Nachricht
 team/inbox/A/done/        von A erledigte Nachrichten
 team/inbox/B/             Nachrichten an B
 team/inbox/B/done/        von B erledigte Nachrichten
-team/inbox/C/             Nachrichten an C
-team/inbox/C/done/        von C erledigte Nachrichten
 team/tasks/               eine Datei pro Task, nur der Besitzer ändert sie
 team/decisions/           eine Datei pro gemeinsamer Entscheidung, nie nachträglich ändern
 contract/                 gemeinsame Schnittstellen (API, Datenformate, Typen)
