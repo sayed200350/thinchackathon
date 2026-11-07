@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import subprocess
@@ -9,6 +10,7 @@ import unittest
 from uuid import uuid4
 
 from backend.evidence_cases import claimant_action, staff_action
+from backend.store import RequestError
 from backend.tests.test_intake import attachment, claim
 
 
@@ -17,19 +19,27 @@ class PostgresTransport:
         # Dollar-quoted JSON, with a fresh delimiter checked against the payload.
         encoded = json.dumps(body, ensure_ascii=True)
         tag = '$' + 'args' + secrets.token_hex(15) + '$'
-        assert tag not in encoded and resource == 'rpc/claim_evidence_io'
-        sql = (
-            f'with args as (select {tag}{encoded}{tag}::jsonb x) select public.claim_evidence_io('
-            "x->>'p_service',x->>'p_action',x->>'p_token',x->'p_data') from args;"
-        )
+        assert tag not in encoded
+        signatures = {
+            'rpc/claim_evidence_io': ("x->>'p_service',x->>'p_action',x->>'p_token',x->'p_data'"),
+            'rpc/claim_staff_read': ("x->>'p_service',x->>'p_action',x->'p_data'"),
+            'rpc/claim_staff_correct': ("x->>'p_service',x->>'p_reference',x->'p_data'"),
+        }
+        args = signatures[resource]
+        fn = resource.split('/')[1]
+        sql = f"with args as (select {tag}{encoded}{tag}::jsonb x) select public.{fn}({args}) from args;"
         result = subprocess.run(
-            ['psql', '-XAtq', '-v', 'ON_ERROR_STOP=1', os.environ['CLAIM_TEST_PG_DSN']],
+            ['psql', '-XAtq', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose', os.environ['CLAIM_TEST_PG_DSN']],
             input='set role anon;\n' + sql,
             text=True,
             capture_output=True,
         )
         if result.returncode:
-            raise RuntimeError(result.stderr.splitlines()[0])
+            message = result.stderr.splitlines()[0]
+            failure = re.search(r'ERROR:\s+PT(400|403|404|409):\s*(.*)', message)
+            if failure:
+                raise RequestError(int(failure[1]), failure[2])
+            raise RuntimeError(message)
         return json.loads(result.stdout), {}
 
 
