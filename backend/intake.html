@@ -326,6 +326,35 @@
         font-size: 14px;
         margin: 12px 0 0;
       }
+      #filing-help {
+        color: var(--ink);
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: clamp(20px, 5vw, 32px);
+        width: min(94vw, 33rem);
+        max-height: 88dvh;
+        overflow-y: auto;
+      }
+      #filing-help::backdrop {
+        background: rgb(14 32 24 / 42%);
+      }
+      .help-exchange {
+        background: var(--pale);
+        padding: 14px 16px;
+        margin: 0 0 18px;
+        border-radius: 8px;
+        overflow-wrap: anywhere;
+      }
+      .help-exchange p {
+        margin: 0;
+      }
+      .help-exchange p + p {
+        margin-top: 8px;
+      }
+      .ask-link {
+        color: var(--accent);
+      }
       .reference {
         font:
           600 clamp(17px, 3vw, 25px) / 1.4 ui-monospace,
@@ -569,6 +598,23 @@
         <p id="announce" class="sr" role="status"></p>
       </section>
     </main>
+    <dialog id="filing-help" aria-labelledby="help-title">
+      <h2 id="help-title">Ask about filing your claim</h2>
+      <div id="help-exchange" class="help-exchange" hidden>
+        <p><strong id="asked-question"></strong></p>
+        <p id="filing-reply" tabindex="-1"></p>
+      </div>
+      <form id="help-form">
+        <label class="label" for="filing-question">Your question</label>
+        <input id="filing-question" type="text" maxlength="1000" required
+          placeholder="Can I send the repair quote later?" autocomplete="off" />
+        <div class="actions">
+          <button type="submit" class="btn primary" id="send-question">Ask</button>
+          <button type="button" class="btn" id="close-help">Back to claim</button>
+        </div>
+      </form>
+      <button type="button" id="keep-answer" class="btn quiet" hidden>Use this text as my claim answer</button>
+    </dialog>
     <script>
       'use strict';
       const fields = [
@@ -1013,6 +1059,7 @@
         if (importResult.notice)
           card.append(el('p', 'help', importResult.notice));
         const form = el('form');
+        form.noValidate = true;
         const typeLabel = el('label', 'label', 'Document type');
         typeLabel.htmlFor = 'import-kind';
         const select = kindSelect(true);
@@ -1045,7 +1092,7 @@
               ? sourceLabel(source)
               : 'Several values found. Choose one or enter your own.'
           );
-          input.value = conflict ? '' : options[0].value;
+          input.defaultValue = conflict ? '' : options[0].value;
           const matchingSource = () => {
             const match =
               options.find(
@@ -1071,7 +1118,7 @@
             for (const option of options) {
               choices.append(
                 button(option.value + ' · page ' + option.page, '', () => {
-                  input.value = option.value;
+                  input.defaultValue = input.value = option.value;
                   input.setCustomValidity('');
                   source = { name: importFile.name, page: option.page };
                   cite.textContent = sourceLabel(source);
@@ -1103,7 +1150,14 @@
         form.addEventListener('submit', (event) => {
           event.preventDefault();
           const chosen = extracted.filter((item) => item.input.value.trim());
-          if (!chosen.every((item) => validField(item.field, item.input)))
+          for (const item of chosen) {
+            if (item.source() || item.literal === item.input.value) continue;
+            if (interceptFilingQuestion(item.input, () => {
+              item.literal = item.input.value;
+              form.requestSubmit();
+            })) return;
+          }
+          if (!select.reportValidity() || !chosen.every((item) => validField(item.field, item.input)))
             return;
           for (const item of chosen) {
             values[item.field.key] = item.input.value.trim();
@@ -1114,6 +1168,138 @@
           setStep(nextUnanswered());
         });
         card.append(form);
+      }
+
+      const helpDialog = document.getElementById('filing-help');
+      const helpInput = document.getElementById('filing-question');
+      const helpReply = document.getElementById('filing-reply');
+      const keepAnswer = document.getElementById('keep-answer');
+      const closeHelp = document.getElementById('close-help');
+      const sendQuestion = document.getElementById('send-question');
+      const unrecognizedQuestion = 'I can help with filing steps, documents, photos, saving a draft and correcting answers. Try asking “Can I send the quote later?”';
+      let returnFocus;
+      let acceptLiteral;
+
+      function filingReply(question) {
+        const text = question.toLowerCase().replace(/[’']/g, '');
+        if (/\b(cover(ed|age)?|eligib\w*|approv\w*|reimburs\w*|payout|liab\w*|pay(s|ment)?|deadline|deductible|premium|fault|compensation|liable|refund|cost|costs)\b/.test(text))
+          return 'The claims team assesses coverage, payment and policy terms. You can record what happened and send your documents here.';
+        if (/\b(how (big|large)|how many (files?|photos?|attachments?|documents?)|file types?|size|limit|formats?|types? of files?|too large|mb|mib|jpeg|png|heic)\b/.test(text))
+          return 'Use PDF, JPEG or PNG files up to 2 MiB each. You can attach up to three files before you submit.';
+        if (/\b(photos?|pictures?|camera|gallery)\b/.test(text))
+          return receipt
+            ? 'The receipt accepts an outstanding incident report or repair quote. Damage photos can be attached before submission.'
+            : 'Attach damage photos before submitting. At Documents, choose Take a photo or Choose from gallery. Use JPEG or PNG, up to 2 MiB per photo.';
+        if (/\b(save|pause|resume|draft|finish later|continue later|come back|start again)\b/.test(text))
+          return receipt
+            ? 'Your claim has been submitted. Keep the private follow-up link on this receipt to reopen it.'
+            : 'Once you have started entering your answers, choose Save and continue later and copy the private link. Open it to return with your answers and attachments. Anyone with that link can open your draft.';
+        if (/\b(private|link|reference)\b/.test(text) && !/\b(quote|estimate|report|upload|attach)\b/.test(text))
+          return 'Saving a draft gives you a private link to resume. After submission, the same link opens your receipt and accepts missing paperwork. Keep the link private. The claim reference identifies your submission.';
+        if (/\b(edit|correct|change|mistake|wrong)\b/.test(text))
+          return receipt
+            ? 'Submitted answers are locked. The private link lets you check your receipt and add outstanding paperwork.'
+            : 'You can correct imported details before confirming them. At Review, choose Edit beside an answer to change it before submitting.';
+        if (/\b(policy (number|id)|find my policy)\b/.test(text))
+          return 'Look for the policy number on your insurance documents. You can save a draft while you look for it.';
+        if (/\b(injur\w*|hurt)\b/.test(text))
+          return 'At the injury question, choose Yes, No or I don’t know. Choose I don’t know if you are unsure.';
+        if (/\b(pdf|import|extract\w*)\b/.test(text) && !/\b(later|missing|after|without|size|receipt)\b/.test(text) && !receipt)
+          return 'To import an accident report, choose Import a PDF on the opening screen. Check and correct its suggestions before continuing. You can also attach PDFs at Documents.';
+        if (/\b(quotes?|estimates?|quotations?|reports?|documents?|docs?|paperwork|attach\w*|upload\w*|receipts?|evidence|pdf)\b/.test(text) || /\b(send|add) (it|them) later\b/.test(text)) {
+          if (receipt) {
+            const missing = receipt.missing_documents.map((key) => kinds[key]);
+            return missing.length
+              ? 'Your receipt lists the outstanding paperwork: ' + missing.join(' and ') + '. Open Add documents to this claim, attach the file, then choose Send additional documents.'
+              : 'All requested paperwork has been received. Your receipt lists the files already sent.';
+          }
+          if (/\b(what is|whats|what does|what counts as)\b/.test(text) && /\b(quote|estimate)\b/.test(text))
+            return 'An itemized repair quote is an estimate from the repairer that lists the work and its costs. You can send it later using the private link on your receipt.';
+          const paperwork = /\b(quotes?|estimates?|quotations?)\b/.test(text)
+            ? 'the repair quote' : 'all the paperwork';
+          return 'You can submit before you have ' + paperwork + '. When you have the missing file, open the private link on your receipt and choose “Add documents to this claim”.';
+        }
+        if (/\b(next|after submission|after (?:i |we )?submit|how (?:do i|to) (?:file|submit))\b/.test(text))
+          return receipt
+            ? 'Your claim has been submitted. Your receipt lists the files received and any paperwork still needed.'
+            : 'At Review, check your answers and choose Submit claim. You will receive a claim reference, a list of received files and a private follow-up link.';
+        return unrecognizedQuestion;
+      }
+
+      function showFilingReply(question) {
+        document.getElementById('asked-question').textContent = question;
+        const reply = filingReply(question);
+        helpReply.textContent = reply;
+        keepAnswer.hidden = !(acceptLiteral && reply === unrecognizedQuestion);
+        closeHelp.classList.add('primary');
+        sendQuestion.classList.remove('primary');
+        helpInput.placeholder = 'Ask another filing question';
+        document.getElementById('help-exchange').hidden = false;
+        helpInput.value = '';
+        helpReply.focus();
+      }
+
+      function openFilingHelp(origin, question = '', useLiteral = null) {
+        returnFocus = origin;
+        acceptLiteral = useLiteral;
+        keepAnswer.hidden = true;
+        closeHelp.classList.remove('primary');
+        sendQuestion.classList.add('primary');
+        helpInput.placeholder = 'Can I send the repair quote later?';
+        document.getElementById('help-exchange').hidden = true;
+        helpInput.value = '';
+        helpDialog.showModal();
+        if (question) showFilingReply(question);
+        else helpInput.focus();
+      }
+
+      document.getElementById('help-form').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const question = helpInput.value.trim();
+        if (!question) return helpInput.focus();
+        acceptLiteral = null;
+        showFilingReply(question);
+      });
+      closeHelp.addEventListener('click', () => helpDialog.close());
+      keepAnswer.addEventListener('click', () => helpDialog.close('use-answer'));
+      helpDialog.addEventListener('close', () => {
+        const use = helpDialog.returnValue === 'use-answer' && acceptLiteral;
+        helpDialog.returnValue = '';
+        acceptLiteral = null;
+        document.getElementById('asked-question').textContent = '';
+        helpReply.textContent = '';
+        helpInput.value = '';
+        if (returnFocus?.isConnected) returnFocus.focus();
+        if (use) use();
+      });
+
+      function soundsLikeQuestion(text) {
+        const start = text.trim().replace(/^(?:hi|hey|hello)[,!]?\s+/i, '');
+        if (/^(?:can|could|may|should|would|will|do|did|does|am|are|is|must|have)\s+(?:i|we|you|it|my|the|this|there|a|an)\b/i.test(start))
+          return true;
+        if (/^(?:how|where|when|what|why|which|who)\s+(?:do|does|did|can|could|is|are|will|should|would|much|many|long|to|if)\b/i.test(start))
+          return true;
+        return /^(?:how|where|when|what|why|which|who|can|could|may|should|would|will|do|did|does|is|are|quote|repair quote|photos?|pdf|documents?)\b.*\?$/i.test(start);
+      }
+
+      function interceptFilingQuestion(input, useLiteral) {
+        if (!input) return false;
+        const original = input.value.trim();
+        // Keep any incident narrative before the question, including its punctuation.
+        const sentences = original.match(/[\s\S]+?(?:[.!?](?=\s|$)|\n|$)/g) || [];
+        const index = sentences.findIndex(soundsLikeQuestion);
+        if (index < 0) return false;
+        const question = sentences.slice(index).join('').trim();
+        const previous = input.defaultValue;
+        const prefix = sentences.slice(0, index).join('').trimEnd();
+        input.value = prefix || (previous === original ? '' : previous);
+        input.dispatchEvent(new Event('input'));
+        openFilingHelp(input, question, () => {
+          input.value = original;
+          input.dispatchEvent(new Event('input'));
+          useLiteral();
+        });
+        return true;
       }
 
       function drawQuestion(card) {
@@ -1145,8 +1331,9 @@
           card.append(choices);
         } else {
           const form = el('form');
+          form.noValidate = true;
           const input = fieldInput(field, 'answer');
-          input.value = partialAnswer || values[field.key] || '';
+          input.defaultValue = partialAnswer || values[field.key] || '';
           input.required = true;
           input.setAttribute('aria-labelledby', 'question-title');
           const actions = el('div', 'actions');
@@ -1160,7 +1347,10 @@
           form.append(input, actions);
           form.addEventListener('submit', (event) => {
             event.preventDefault();
-            if (validField(field, input)) finish(input.value.trim());
+            const commit = () => {
+              if (validField(field, input)) finish(input.value.trim());
+            };
+            if (!interceptFilingQuestion(input, commit)) commit();
           });
           card.append(form);
         }
@@ -1403,6 +1593,11 @@
       }
 
       function saveDraft() {
+        if (!interceptFilingQuestion(current.querySelector('#answer'), persistDraft))
+          persistDraft();
+      }
+
+      function persistDraft() {
         const previousAnswer = fields[step]
           ? values[fields[step].key] || partialAnswer
           : '';
@@ -1688,6 +1883,12 @@
         error.setAttribute('role', 'alert');
         error.hidden = true;
         card.append(error);
+        if (!pending && !conflict) {
+          const ask = button('Ask a question', 'quiet ask-link', () =>
+            openFilingHelp(current.querySelector('#answer') || ask)
+          );
+          card.append(ask);
+        }
         if (!pending && !conflict && step >= 0 && !receipt) {
           const save = el('div', 'save-bar');
           save.append(button('Save and continue later', 'quiet', saveDraft));
