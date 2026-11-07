@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Incoming claims · Policy Twin</title>
+  <link rel="stylesheet" href="/workbench.css"><script defer src="/incoming.js"></script>
+</head>
+<body class="incoming">
+<header><div><span class="eyebrow">Policy Twin / Insurer</span><h1>Incoming claims</h1></div>
+  <a class="button" href="/">Policy workbench</a></header>
+<main>
+  <section class="panel" aria-label="Inbox controls">
+    <button id="refresh">Refresh inbox</button>
+    <p id="notice" role="status" aria-live="polite"></p>
+  </section>
+  <div class="columns" id="workspace" hidden>
+    <section class="panel list"><h2>Submitted claims</h2>
+      <div class="table-scroll"><table><thead><tr><th>Claim</th><th>Handling step</th></tr></thead>
+        <tbody id="rows"></tbody></table></div><button id="more" hidden>Load more claims</button></section>
+    <section class="panel detail" aria-label="Claim detail"><h2 id="heading">Claim detail</h2>
+      <div id="detail"></div>
+      <form id="simulate" hidden><h3>Proposed policy</h3>
+        <label for="limit">Human review for quotes above (€)</label>
+        <input type="number" id="limit" min="1" max="1000000" step="1" value="2000" required>
+        <button class="primary">Replay this claim</button></form>
+      <div class="fields" id="comparison" aria-live="polite"></div>
+    </section>
+  </div>
+</main>
+</body></html>

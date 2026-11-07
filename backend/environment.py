@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 ALLOWED = {"AI_API_KEY", "AI_PROVIDER", "AI_BASE_URL", "AI_MODEL", "AI_TIMEOUT_SECONDS",
-           "POLICY_TWIN_OWNER_TOKEN", "POLICY_TWIN_OWNER_NAME"}
+           "POLICY_TWIN_OWNER_TOKEN", "POLICY_TWIN_OWNER_NAME", "CLAIM_REVIEWER_KEY"}
 
 
 def load_environment(path=None):

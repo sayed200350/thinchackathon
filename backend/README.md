@@ -10,6 +10,8 @@ Open **http://127.0.0.1:8767**. Keep the terminal open; Ctrl+C stops it. No addi
 
 The workbench starts **empty**: no claims are preloaded. Use **Upload CSV** to load your own file. It uses the fresh database `backend/.local/workbench.sqlite3` and does not open older databases. To preload claims anyway, pass `--claims FILE [FILE ...]`.
 
+Open [Incoming claims](http://127.0.0.1:8767/incoming) to see submissions directly on the demo machine. The workbench authenticates to the claimant API with the server's `CLAIM_REVIEWER_KEY` from the environment or a private settings file. The default claimant API port is 8765. For the Thinc demo, run `python -m backend.workbench_server --open --intake-port 8766 --env-file /tmp/thinc-staff-handoff/runtime.env`. Anyone using the local workbench can view submitted claims and original documents. **Replay this claim** tests a proposed quote limit against the recorded evidence.
+
 ## Policy upload (Word or JSON)
 
 Upload the policy like the CSV: **Upload policy** accepts the Word document (`.docx`) or the engine's JSON. Nothing is assessed until both a CSV and a policy are loaded. A Word policy is converted on the server (`engine/docx_policy.py`) and the page lists the rules it read so you can check them. The converter understands the supplied wording ("Send to human_review if …; or quote_eur is greater than €1,500." / "Otherwise, send to routine_processing.") and refuses anything else with a message rather than guessing. Only `and`-free conditions on the claim fields are supported. The supplied `policy_v1.docx` converts to exactly the bundled v1 policy. Candidate (v2) policies can be uploaded as Word or JSON the same way and are matched to the uploaded policy's `policy_id`.

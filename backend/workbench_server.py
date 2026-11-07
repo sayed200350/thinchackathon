@@ -5,6 +5,7 @@ from contextlib import closing
 import csv
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -12,7 +13,7 @@ from threading import Condition
 from urllib.parse import unquote, urlsplit
 
 from .store import RequestError, case_detail, claim_list, connect, initialize, preview, save_correction
-from . import workbench, changes, adaptation
+from . import workbench, changes, adaptation, workbench_inbox
 from .ai_service import AIUnavailable
 
 
@@ -24,7 +25,8 @@ class Handler(BaseHTTPRequestHandler):
     def reply(self, status, payload=None):
         data = b"" if payload is None else json.dumps(payload, ensure_ascii=False, allow_nan=False).encode()
         self.send_response(status)
-        if self.server.ui_origin and self.headers.get("Origin") == self.server.ui_origin:
+        if (not urlsplit(self.path).path.startswith("/api/incoming/") and self.server.ui_origin
+                and self.headers.get("Origin") == self.server.ui_origin):
             self.send_header("Access-Control-Allow-Origin", self.server.ui_origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Policy-Owner-Token")
@@ -60,6 +62,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def dispatch_request(self):
         parts = [unquote(p) for p in urlsplit(self.path).path.strip("/").split("/")]
+        if self.command == "POST" and len(parts) == 3 and parts[:2] == ["api", "incoming"]:
+            port = self.server.server_port
+            host = self.headers.get("Host")
+            if host not in (f"127.0.0.1:{port}", f"localhost:{port}") or self.headers.get("Origin") != f"http://{host}":
+                raise RequestError(403, "Open the inbox from the local workbench.")
+            return 200, workbench_inbox.incoming(self.server.intake_port, parts[2], self.read_json(),
+                                                 self.server.reviewer_key)
         with closing(connect(self.server.database)) as db:
             if self.command == "GET":
                 if parts == ["api", "adaptation"]:
@@ -150,7 +159,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if urlsplit(self.path).path == "/api/adaptation/events":
             return self.stream_events()
-        assets = {"/": ("index.html", "text/html"), "/workbench.js": ("workbench.js", "text/javascript"),
+        assets = {"/incoming": ("incoming.html", "text/html"), "/incoming.js": ("incoming.js", "text/javascript"),
+                  "/": ("index.html", "text/html"), "/workbench.js": ("workbench.js", "text/javascript"),
                   "/workbench.css": ("workbench.css", "text/css"),
                   "/explain.js": ("explain.js", "text/javascript"),
                   "/adaptation.js": ("adaptation.js", "text/javascript")}
@@ -162,6 +172,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            if asset[0] == "incoming.html":
+                self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
             self.end_headers()
             self.wfile.write(data)
             return
@@ -174,17 +186,21 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     from .environment import load_environment
-    load_environment()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--env-file", type=Path, help="server settings, including the staff connection credential")
     parser.add_argument("--port", type=int, default=8767)
+    parser.add_argument("--intake-port", type=int, default=8765, help="local claimant API port for submitted claims")
     parser.add_argument("--db", type=Path, default=ROOT / "backend/.local/workbench.sqlite3")
     parser.add_argument("--claims", type=Path, nargs="*", default=DEFAULT_SOURCES)
     parser.add_argument("--ui-origin", help="permitted browser origin, e.g. http://localhost:5173")
     parser.add_argument("--open", action="store_true", help="open the workbench in your default browser")
     args = parser.parse_args()
     try:
+        load_environment(args.env_file)
         initialize(args.db, args.claims, workbench=True)
         with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as server:
+            server.intake_port = args.intake_port
+            server.reviewer_key = os.getenv("CLAIM_REVIEWER_KEY")
             server.database = args.db
             server.ui_origin = args.ui_origin
             server.updates = Condition()
