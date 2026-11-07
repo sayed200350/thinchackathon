@@ -26,7 +26,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCES = [ROOT / "data/taktile" / name for name in
                    ("labelled_development_cases.csv", "unlabelled_practice_cases.csv")]
 SERVER_SETTINGS = {"JEV_API_KEY", "JEV_MODEL", "OPENAI_API_KEY", "OPENAI_MODEL",
-                   "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY", "CLAIM_REVIEWER_KEY", "CLAIM_EVIDENCE_SERVICE_KEY"}
+                   "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY", "CLAIM_REVIEWER_KEY", "CLAIM_EVIDENCE_SERVICE_KEY",
+                   "GARAGE_PUBLIC_ORIGIN", "CLAIM_GARAGE_KEY"}
 INTAKE_REQUEST_LIMIT = 9 * 1024 * 1024  # Three 2 MiB files after base64 encoding, plus form fields.
 
 
@@ -101,8 +102,36 @@ class Handler(BaseHTTPRequestHandler):
         except (UnicodeError, ValueError, RecursionError):
             raise RequestError(400, "Malformed JSON.")
 
+    def garage_request(self, action):
+        limit = 3 * 1024 * 1024 if action == "upload" else 8192
+        body = self.read_json(limit)
+        expected = {"token", "document"} if action == "upload" else {"token"}
+        if not isinstance(body, dict) or body.keys() != expected:
+            raise RequestError(400, "Send the garage request with the expected fields.")
+        if not self.server.garage_origin:
+            raise RequestError(503, "Garage sharing needs a phone-accessible address. Ask the demo host to set GARAGE_PUBLIC_ORIGIN.")
+        try:
+            from . import garage_links, garage_public
+        except ImportError:
+            raise RequestError(503, "Install the garage sharing requirements on the API server.") from None
+        token, key = body["token"], self.server.garage_key
+        with self.server.open_store() as store:
+            if action == "garage-link":
+                origin = garage_public.public_share_origin(self.server.garage_origin)
+                invite = garage_links.issue(store, token, key)
+                return 200, garage_public.make_share_details(origin, invite["token"], invite["expires_at"])
+            if action == "status":
+                return 200, garage_links.status(store, token, key)
+            return 200, garage_links.upload(store, token, body["document"], key)
+
     def dispatch_request(self):
         parts = [unquote(p) for p in urlsplit(self.path).path.strip("/").split("/")]
+        if self.command == "POST" and parts == ["api", "intakes", "garage-link"]:
+            return self.garage_request("garage-link")
+        if self.command == "POST" and len(parts) == 3 and parts[:2] == ["api", "garage"]:
+            if parts[2] not in ("status", "upload"):
+                raise RequestError(404, "Unknown garage operation.")
+            return self.garage_request(parts[2])
         if self.command == "GET" and parts in ([""], ["chat"]):
             return 200, self.server.intake_page
         if self.command == "GET" and parts == ["reviewer"]:
@@ -168,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlsplit(self.path).path
+        if path == "/garage":
+            self.reply(200, (ROOT / "backend/garage.html").read_bytes())
+            return
         if path == "/reviewer/evidence":
             self.reply(200,(ROOT/"backend/quote_review.html").read_bytes())
             return
@@ -201,6 +233,7 @@ def main():
     parser.add_argument("--db", type=Path, help="offline SQLite database path")
     parser.add_argument("--claims", type=Path, nargs="+", help="CSV inputs for offline SQLite")
     parser.add_argument("--ui-origin", help="permitted browser origin, e.g. http://localhost:5173")
+    parser.add_argument("--garage-public-origin", help="phone-accessible origin of the garage-only gateway")
     args = parser.parse_args()
     try:
         load_settings(args.env_file)
@@ -208,6 +241,9 @@ def main():
         with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as server:
             state_dir = args.db.parent/'.evidence-keys' if args.db else args.env_file.resolve().parent/'backend/.local'
             server.staff_key = credential(state_dir,'CLAIM_REVIEWER_KEY')
+            server.garage_origin = args.garage_public_origin or os.getenv("GARAGE_PUBLIC_ORIGIN", "")
+            if server.garage_origin:
+                server.garage_key = credential(state_dir, "CLAIM_GARAGE_KEY")
             if storage == 'Supabase':
                 os.environ['CLAIM_EVIDENCE_SERVICE_KEY'] = credential(state_dir, 'CLAIM_EVIDENCE_SERVICE_KEY')
             server.open_store = open_store

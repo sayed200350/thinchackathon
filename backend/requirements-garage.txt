@@ -1,0 +1,3 @@
+# Runtime dependencies for encrypted garage shares and offline QR generation.
+cryptography>=44
+qrcode==8.2

@@ -23,6 +23,37 @@ python3 -m backend --store sqlite
 
 These routes are triage recommendations. The demo uses DEV-003’s fictional policy and incident facts. Ordinary submissions keep unavailable facts unknown. To rehearse a file without submitting a claim, use **Upload garage quote** in the [reviewer’s fictional replay](http://127.0.0.1:8765/reviewer/evidence).
 
+## Let a judge send the revised quote from their phone
+
+1. Configure a phone-accessible garage gateway using the steps below. File the fictional €890 total-only claim, then click **Request breakdown from garage** and **Enlarge QR code** on its receipt. Press Escape to return to the receipt.
+2. Have a judge scan the QR code with their phone camera. The phone can choose an actual repair estimate from Files, or use an example on the fictional claim. Choose **Send quote**. The phone receives a confirmation.
+3. The presenter’s receipt picks up the new PDF and displays **Received from garage**. An itemized €890 estimate takes the fictional case to routine processing. A €1,800 estimate takes it to human review. Open the saved claim in the reviewer to compare the original and revised estimates with their respective decisions.
+4. Request a fresh link from the updated receipt for another judge. One link accepts one PDF of up to 2 MiB. Repeated scans after upload show the confirmation. A different quote arriving first closes the old link. Unused links expire after seven days.
+
+### Start the phone gateway
+
+From the repository root, install the QR and encryption dependencies in a virtual environment and run the garage gateway in the first terminal.
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements-garage.txt
+.venv/bin/python -m backend.garage_public --port 8770 --upstream http://127.0.0.1:8766
+```
+
+In a second terminal, start a temporary HTTPS address pointed at **8770**, the garage-only port. On macOS, install the client once with `brew install cloudflared`.
+
+```sh
+cloudflared tunnel --url http://127.0.0.1:8770
+```
+
+In a third terminal, replace the example origin below with the HTTPS origin printed by the tunnel. Use `--store supabase` with the existing project configuration for shared storage.
+
+```sh
+.venv/bin/python -m backend --store sqlite --port 8766 --garage-public-origin https://YOUR-TUNNEL.trycloudflare.com
+```
+
+Open the [presenter chat](http://127.0.0.1:8766/chat?demo=DEV-003). Keep the Mac awake and all three processes running. When a temporary tunnel gets a new address, restart the API with that origin and generate a fresh QR from the receipt. For private Wi-Fi that allows communication between devices, start the gateway with `--bind 0.0.0.0` and configure the API origin as `http://<Mac-LAN-IP>:8770` instead of starting a tunnel. QR images are generated locally. [Cloudflare Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
+
 ## Other claimant journeys
 
 - **Import a report.** From [claim intake](http://127.0.0.1:8765/chat) import the [sample accident report](http://127.0.0.1:8765/sample-accident-report.pdf). Check suggested answers against their filename and page. Choose **Ask a question** for filing help and return to the unfinished answer.
