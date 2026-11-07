@@ -12,6 +12,7 @@ import sys
 from urllib.parse import unquote, urlsplit
 
 from .chat import answer
+from .intake import initialize_intakes, validate_intake
 from .store import RequestError, connect, initialize
 
 
@@ -20,6 +21,7 @@ DEFAULT_SOURCES = [ROOT / "data/taktile" / name for name in
                    ("labelled_development_cases.csv", "unlabelled_practice_cases.csv")]
 SERVER_SETTINGS = {"JEV_API_KEY", "JEV_MODEL", "OPENAI_API_KEY", "OPENAI_MODEL",
                    "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY"}
+INTAKE_REQUEST_LIMIT = 9 * 1024 * 1024  # Three 2 MiB files after base64 encoding, plus form fields.
 
 
 def load_settings(path):
@@ -49,6 +51,7 @@ def open_store_factory(mode, database, sources):
         return "Supabase", lambda: nullcontext(store)
     path = database or ROOT / "backend/.local/reviewer.sqlite3"
     initialize(path, sources or DEFAULT_SOURCES)
+    initialize_intakes(path)
     return "SQLite", lambda: closing(connect(path))
 
 
@@ -72,25 +75,30 @@ class Handler(BaseHTTPRequestHandler):
         if data:
             self.wfile.write(data)
 
-    def read_json(self):
+    def read_json(self, max_bytes=65536):
         if self.headers.get_content_type() != "application/json":
             raise RequestError(415, "Send Content-Type: application/json.")
         try:
             size = int(self.headers.get("Content-Length", ""))
         except ValueError:
             raise RequestError(411, "A Content-Length header is required.")
-        if not 0 < size <= 65536:
-            raise RequestError(413, "Expected a JSON body of at most 64 KiB.")
+        if not 0 < size <= max_bytes:
+            raise RequestError(413, f"Expected a JSON body of at most {max_bytes // 1024} KiB.")
         try:
             return json.loads(self.rfile.read(size).decode("utf-8"))
-        except (UnicodeError, ValueError):
+        except (UnicodeError, ValueError, RecursionError):
             raise RequestError(400, "Malformed JSON.")
 
     def dispatch_request(self):
         parts = [unquote(p) for p in urlsplit(self.path).path.strip("/").split("/")]
         if self.command == "GET" and parts in ([""], ["chat"]):
-            return 200, self.server.chat_page
+            return 200, self.server.intake_page
+        if self.command == "GET" and parts == ["reviewer"]:
+            return 200, self.server.reviewer_page
         with self.server.open_store() as store:
+            if self.command == "POST" and parts == ["api", "intakes"]:
+                payload = validate_intake(self.read_json(INTAKE_REQUEST_LIMIT))
+                return 200, store.save_intake(payload)
             if self.command == "GET":
                 if parts == ["api", "claims"]:
                     return 200, store.claim_list()
@@ -137,7 +145,8 @@ def main():
         storage, open_store = open_store_factory(args.store, args.db, args.claims)
         with ThreadingHTTPServer(("127.0.0.1", args.port), Handler) as server:
             server.open_store = open_store
-            server.chat_page = Path(__file__).with_name("chat.html").read_bytes()
+            server.intake_page = Path(__file__).with_name("intake.html").read_bytes()
+            server.reviewer_page = Path(__file__).with_name("chat.html").read_bytes()
             server.ui_origin = args.ui_origin
             print(f"Reviewer data source: {storage}", file=sys.stderr, flush=True)
             print(f"Serving Policy Replay at http://127.0.0.1:{server.server_port}", flush=True)

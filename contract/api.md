@@ -12,14 +12,29 @@ For an offline rehearsal, pass `--store sqlite`. The offline store seeds `backen
 
 | Method and path | Response |
 | --- | --- |
-| `GET /chat` | Browser chat for the local demo. Also served at `/`. |
-| `POST /api/chat` | One read-only conversation turn. Returns the selected claim, answer, evidence, suggested follow-ups and the providers actually used. |
+| `GET /chat` or `GET /` | Claimant intake conversation with attachment upload, review and receipt. |
+| `POST /api/intakes` | Submit a confirmed claimant packet and its files in one transaction. Returns a receipt, including on an identical retry. |
+| `GET /reviewer` | Reviewer workspace for the fictional demo queue. |
+| `POST /api/chat` | A reviewer question about an existing demo case. Returns the selected claim, answer, evidence, suggested follow-ups and the providers actually used. |
 | `GET /api/claims` | `{"claims":[...]}`. Rows have `case_id`, `case_status`, the original `recommendation`, the current `effective_recommendation`, and integer `revision`. |
 | `GET /api/claims/{case_id}` | `claim` (source CSV fields, excluding development labels), `decision` (immutable [engine result](example-result-DEV-001.json)), `effective_recommendation`, `revision`, and `history` (oldest first). |
 | `POST /api/claims/{case_id}/corrections` | Append a correction. Returns the updated detail object, HTTP 201 on creation and 200 on an identical retry. |
 | `GET /api/policy-preview` | Until the official update, returns `status: "awaiting_v2"`, `from_version: "v1"`, `to_version: "v2"`, open/closed claim counts, and `changes: null`. |
 
-## Connect the Lovable chat
+## Connect claimant intake in Lovable
+
+Collect answers and attachments in memory. On **Submit claim**, send a JSON object to `POST /api/intakes`. Generate `request_id` with `crypto.randomUUID()`. Keep the exact confirmed body when retrying after an interrupted response.
+
+| Field | Accepted value |
+| --- | --- |
+| `description`, `location`, `policy_number` | Incident description (10–2,000 characters), location (1–160) and policy reference (1–80). |
+| `incident_date`, `email`, `injury_status` | A valid YYYY-MM-DD date up to today in Europe/Berlin, a contact email, and `yes`, `no` or `unknown`. |
+| `documents` | An array of up to three objects. Use `[]` to submit without files. Each object has `kind`, `name` and `content_base64` (standard base64 with no data-URL prefix). |
+| `kind` | `incident_report`, `itemized_quote` or `damage_photo`. Each file must be PDF, PNG or JPEG, up to 2 MiB, with a matching filename extension. |
+
+HTTP 200 returns `reference`, `document_count` and `missing_documents`. The latter lists any outstanding incident report or itemized quote. An invalid packet returns 400, a changed retry under an existing ID returns 409, and an oversized request returns 413. Each succeeded receipt refers to one complete saved packet. Private submissions have no public read endpoint. [Staff access](db/README.md)
+
+## Connect the reviewer chat
 
 Send the latest question and copy the last response’s `case_id` into the next request. A new claim ID in the question switches the conversation to that claim. Include recent completed turns as `{"role":"user"|"assistant","content":"..."}`. The service accepts a maximum of 16 history entries and 2,000 characters in the new message.
 

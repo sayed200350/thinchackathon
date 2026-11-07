@@ -89,7 +89,7 @@ class ChatHTTPTests(unittest.TestCase):
     def test_real_page_and_http_requests_without_credentials(self):
         with TemporaryDirectory() as folder, patch.dict(os.environ, {'OPENAI_API_KEY': '', 'JEV_API_KEY': ''}), running_api(Path(folder) / 'db') as port:
             with closing(HTTPConnection('127.0.0.1', port)) as connection:
-                connection.request('GET', '/chat')
+                connection.request('GET', '/reviewer')
                 page = connection.getresponse()
                 self.assertEqual(page.status, 200)
                 self.assertIn('text/html', page.getheader('Content-Type'))

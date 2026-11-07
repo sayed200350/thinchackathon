@@ -2,11 +2,19 @@
 
 Taktile track · thinc! hack MUC · 7–8 November 2026
 
-Policy Replay is a chatbot for motor-insurance reviewers. Ask why a claim took its route, test a different fact, or record a human correction. The same engine produces the judges’ batch CSV. The official v2 policy will determine which open claims need a second look.
+Policy Replay receives motor-insurance claims in a guided conversation. A claimant describes the incident, attaches evidence, checks their answers and receives a claim reference. Reviewers use a separate workspace to explore the fictional Taktile cases and replay policy decisions.
 
-## Try the reviewer chatbot
+## Report a motor claim
 
-Run `python3 -m backend` from the repository root with Python 3.9+ and open the [local chat](http://127.0.0.1:8765/chat).
+Run `python3 -m backend` from the repository root with Python 3.9+ and open the [claim intake chat](http://127.0.0.1:8765/chat).
+
+1. Describe what happened. The chat asks for the date, location, policy number, contact email and whether anyone was injured.
+2. Attach an incident report, itemized quote or damage photo. It accepts up to three PDF, JPEG or PNG files of 2 MiB each. A claimant can submit with missing paperwork.
+3. Review the answers and select **Submit claim**. The receipt shows the claim reference, attachment count and any outstanding documents. Staff can use that reference to locate the private packet. The intake uses no model credentials.
+
+## Review the fictional demo cases
+
+Open the [reviewer workspace](http://127.0.0.1:8765/reviewer).
 
 1. Ask **“Why does DEV-002 need more information?”** The decision identifies the missing incident report under v1.2.
 2. Ask **“What if we received the incident report?”** The simulator changes that one fact and returns routine processing under v1.3. Expand the evidence to read the policy clause.
@@ -14,11 +22,11 @@ Run `python3 -m backend` from the repository root with Python 3.9+ and open the 
 
 For a live boundary test, ask about DEV-001, then try a €1,500 quote and a €1,501 quote. Only the second amount triggers human review.
 
-The demo works without model credentials. To enable the integrations, set `JEV_API_KEY` and/or `OPENAI_API_KEY` in the server’s local `.env` and restart. Jev classifies the question. GPT selects which verified statements to include in a claim explanation. The evidence panel identifies the source used for each answer. The browser calls the [chat API](contract/api.md).
+To enable models for reviewer questions, set `JEV_API_KEY` and/or `OPENAI_API_KEY` in the server’s local `.env` and restart. Jev classifies the question. GPT selects verified statements for a claim explanation. The evidence panel identifies the source for each answer. [HTTP contract](contract/api.md)
 
 ## Hosted database for Lovable
 
-The reviewer API, chatbot and Lovable can share the Thinc Supabase project. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the publishable key) in the server’s ignored `.env`, then run `python3 -m backend --store supabase`. The server prints its active data source at startup. A saved correction appears in the shared claim’s history. Chat transcripts stay in the current browser tab. See the [database setup and verification](contract/db/README.md).
+The intake and reviewer API share the Thinc Supabase project. Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the publishable key) in the server’s ignored `.env`, then run `python3 -m backend --store supabase`. New claimant submissions and file contents go into private tables. The public demo queue contains fictional examples. [Database setup and staff access](contract/db/README.md)
 
 For a rehearsal with a private SQLite copy, run `python3 -m backend --store sqlite`.
 

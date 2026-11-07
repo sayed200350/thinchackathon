@@ -23,6 +23,8 @@ The browser roles can read the fictional demo data and append reviewer actions. 
 
 ## Reproduce the setup
 
+For claimant intake, run [claim_intake.sql](claim_intake.sql). It creates two private tables and a submit-only function for the app. Run the [intake smoke test](../../backend/supabase_intake_smoke.sql) to verify attachment bytes, private access, retry handling and rollback. The backend stores original document bytes alongside the submission.
+
 1. Run [schema.sql](schema.sql), then [reviewer_corrections.sql](reviewer_corrections.sql) in the Supabase SQL Editor. The second script preserves existing audit entries, assigns revisions, and installs the atomic correction function.
 2. From the repo root, run `python3 -m backend.supabase_seed > /tmp/policy-replay-seed.sql`. Run its contents in the SQL Editor. The seed inserts 26 official fictional claims, their 26 v1 engine decisions and the 14 supplied development labels. It checks existing snapshots and rolls back on conflicting data.
 3. Run the [fixture and grants test](../../backend/supabase_smoke.sql) and [shared correction test](../../backend/supabase_correction_smoke.sql) in the SQL Editor. The latter inserts a temporary claim, exercises both write paths, checks idempotent retries and stale revisions, then rolls back its test records.
@@ -34,3 +36,16 @@ The browser roles can read the fictional demo data and append reviewer actions. 
    ```
 
 The hosted setup was checked on 7 November 2026. The browser-role test returned 26 decisions, 14 matching development labels and two closed cases. Readback through the Data API confirmed 24 open cases and zero saved overrides immediately after setup. No v2 expectations have been imported. Sayed maintains the validation labels after the official update, using independent expected outcomes reviewed with Rafik.
+
+## Find a submitted claim and its documents
+
+As an authorized project member, open the [Table Editor](https://supabase.com/dashboard/project/bdbvfcfmlhpfefdtrbkd/editor), select the `claim_intake_private` schema, and filter `submissions` by the claimant’s `reference`. Filter `documents` by the same reference to find the original filename, document category, position and file contents. Claimant details and attachments are accessible to database staff. The publishable key can submit a packet and receive its receipt.
+
+With an authorized PostgreSQL connection in your environment, this example saves the first attachment on your computer. Supply its actual reference and use the filename shown in the table.
+
+```sh
+psql -XqAt -v ON_ERROR_STOP=1 -v ref='CLM-REPLACE-WITH-REFERENCE' <<'SQL' | xxd -r -p > attachment.pdf
+select encode(content, 'hex') from claim_intake_private.documents
+where reference = :'ref' and position = 1;
+SQL
+```
