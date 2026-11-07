@@ -66,6 +66,12 @@ On 7 November 2026, Thinc applied this migration and passed the rollback-only SQ
 
 For projects already running the evidence schema, apply [claim_image_sizes.sql](claim_image_sizes.sql) to enable larger photographed reports and quotes. Fresh installations include this limit. The enhanced claimant path accepts four initial attachments and preserves every original JPEG or PNG up to 12 MiB and each PDF up to 2 MiB. A claim can hold up to 40 files including later paperwork. Submitted links return receipt details and next-action guidance. Staff retrieve original attachments using a reference and the reviewer key. The project URL and publishable key may be used by the Lovable frontend. Keep the evidence service credential on the backend. [HTTP contract](../api.md)
 
+## Install the insurer inbox
+
+After the private evidence migration, apply [staff_corrections.sql](staff_corrections.sql), then [staff_inbox.sql](staff_inbox.sql). Both reuse the installed service verifier. The migrations add private, audited decisions and a paginated read function over existing submissions. Direct browser access to the underlying tables remains restricted. Enable the new HTTP backend alongside these migrations.
+
+Start the dedicated staff gateway with `python3 -m backend.staff_public --port 8774 --upstream http://127.0.0.1:8766` and expose that port through HTTPS for the insurer's server. The claimant and garage gateways have their own allowlists. For the full request and response fields see the [insurer HTTP contract](../api.md#insurer-inbox-originals-and-corrections).
+
 ## Find a submitted claim and its documents
 
 As an authorized project member, open the [Table Editor](https://supabase.com/dashboard/project/bdbvfcfmlhpfefdtrbkd/editor), select the `claim_intake_private` schema, and filter `submissions` by the claimant’s `reference`. Filter `documents` by the same reference to find the original filename, document category, position and file contents. Claimant details and attachments are accessible to database staff. The publishable key can submit a packet and receive its receipt.

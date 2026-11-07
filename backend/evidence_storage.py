@@ -12,6 +12,8 @@ from .store import RequestError, connect
 
 
 def initialize(path):
+    from . import staff_corrections
+    staff_corrections.initialize(path)
     with closing(connect(path)) as db:
         db.execute("""CREATE TABLE IF NOT EXISTS intake_evidence (
           reference TEXT PRIMARY KEY REFERENCES intake_submissions(reference),

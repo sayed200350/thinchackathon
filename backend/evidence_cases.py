@@ -3,7 +3,6 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 import hashlib
-import hmac
 import json
 from uuid import uuid4
 
@@ -242,24 +241,6 @@ def claimant_action(store, action, body):
 
 
 def staff_action(store, action, body, key):
-    supplied = body.get('reviewer_key')
-    if not key or not isinstance(supplied, str) or not hmac.compare_digest(supplied.encode(), key.encode()):
-        raise RequestError(403, 'A valid staff access key is required.')
-    ref = body.get('reference')
-    if not isinstance(ref, str) or not ref.startswith('CLM-') or not UUID_V4.fullmatch(ref[4:]):
-        raise RequestError(400, 'Enter a claim reference.')
-    if action == 'document':
-        i = body.get('position')
-        if type(i) is not int or i < 0 or i >= 40:
-            raise RequestError(400, 'Invalid attachment position.')
-        return exchange(store, 'file', '', {'reference': ref, 'position': i})
-    record = exchange(store, 'staff', '', {'reference': ref})
-    state = record['state']
-    evidence = {k: v for k, v in state.items() if k != 'facts'}
-    evidence.update(next_action=_next_action(state), notes=_submitted_notes(state['notes']))
-    return {
-        'reference': ref,
-        'incident_date': record['incident_date'],
-        'documents': record['receipt']['documents'],
-        'evidence': evidence,
-    }
+    """Compatibility entry point for existing staff evidence integrations."""
+    from .staff import staff_action as read
+    return read(store, action, body, key)

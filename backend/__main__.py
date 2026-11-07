@@ -16,7 +16,8 @@ from .intake import EVIDENCE_FILE_REQUEST_LIMIT, initialize_intakes, validate_in
 from .intake_links import append_documents, initialize_intake_links, resolve_link, save_draft, submit_linked
 from .intake_pdf import extract_pdf
 from .quote_evidence import assess_quote, demo_replay, QUOTE_EXAMPLES
-from .evidence_cases import claimant_action, staff_action
+from .evidence_cases import claimant_action
+from .staff import staff_action, staff_correction
 from . import evidence_storage
 from .evidence_setup import credential
 from .store import RequestError, connect, initialize
@@ -126,6 +127,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def dispatch_request(self):
         parts = [unquote(p) for p in urlsplit(self.path).path.strip("/").split("/")]
+        if self.command == "POST" and parts in (["api", "staff", "inbox"], ["api", "staff", "corrections"]):
+            body = self.read_json()
+            with self.server.open_store() as store:
+                if parts[-1] == "corrections":
+                    return staff_correction(store, body, self.server.staff_key)
+                return 200, staff_action(store, "inbox", body, self.server.staff_key)
         if self.command == "POST" and parts == ["api", "intakes", "garage-link"]:
             return self.garage_request("garage-link")
         if self.command == "POST" and len(parts) == 3 and parts[:2] == ["api", "garage"]:

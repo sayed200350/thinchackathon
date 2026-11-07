@@ -87,11 +87,53 @@ The garage token travels in the fragment of `/garage#upload=…` and in the body
 
 Configure `GARAGE_PUBLIC_ORIGIN` or `--garage-public-origin` on the claimant API to enable issuance. Use the URL of the restricted garage gateway. An absent or unusable sharing address returns 503. The backend uses a separate persisted `claim_garage_key` in its existing private key directory. All replicas must use the same server-only `CLAIM_GARAGE_KEY` or persisted key. Rotating it invalidates existing links. The current Thinc evidence schema supports this operation.
 
-### Staff evidence and credentials
+### Insurer inbox, originals and corrections
 
-In **Open submitted claim**, staff enter the public claim reference and their reviewer key. Send both in JSON over HTTPS when hosted. The staff response includes `reference`, `incident_date`, the filenames in `documents`, and `evidence` with the latest decision, append-only quote versions, decision history, and both sets of notes. `history[].decision.matched_rule` gives the clause for that version. `quotes[].position` identifies its original file. File positions are zero-based in all HTTP responses. Missing or incorrect staff credentials return 403. A reference without an enhanced record returns 404.
+Call these routes from an insurer-authenticated server or Lovable Edge Function. Check that the signed-in user is authorized as staff **before** calling the service. Add `reviewer_key` from the server's secret store to each JSON body. The dedicated staff gateway rejects browser-origin requests. Configure its HTTPS origin on the insurer server as `STAFF_API_ORIGIN` and the shared key as `CLAIM_REVIEWER_KEY`. The separate `CLAIM_EVIDENCE_SERVICE_KEY` belongs only on the Python backend. Staff responses use `Cache-Control: no-store`.
 
-The server’s `CLAIM_REVIEWER_KEY` authenticates staff. The separate `CLAIM_EVIDENCE_SERVICE_KEY` authenticates the Python service to the Supabase evidence function. Keep both out of Lovable environment variables prefixed with `VITE_`, public source, URLs and claimant messages. Staff can enter the reviewer key in the protected lookup form. Configure the evidence service key only on the backend. The [database setup](db/README.md) covers local credential files, provisioning and migration.
+| POST route | Additional JSON fields | Result |
+| --- | --- | --- |
+| `/api/staff/inbox` | Optional `limit` (1–100, default 25) and `cursor` from the preceding page | `claims` and opaque `next_cursor`, null on the last page |
+| `/api/evidence/reviewer` | `reference` | Inbox fields, `incident_date`, ordered `documents`, `evidence` and chronological staff `corrections` |
+| `/api/evidence/document` | `reference`, zero-based integer `position` | Original `name` and `content_base64` for PDF, JPEG or PNG |
+| `/api/staff/corrections` | `reference`, `expected_revision`, `policy_version`, `request_id`, `reviewer`, `reason`, `recommendation` | 201 for a new correction or 200 for an identical retry. The response contains `reference`, current `revision` and the saved `correction` |
+
+Every submitted CLM appears once, including claims filed before evidence version 1. New paperwork updates its existing row. Drafts have no inbox entry. Results sort by submission time descending with reference as a tie breaker. Refresh from page one to see new arrivals. This abbreviated example shows an evidence-enabled fictional claim.
+
+```json
+{
+  "claims": [{
+    "reference": "CLM-00000000-0000-4000-8000-000000000001",
+    "submitted_at": "2026-11-07T18:00:00+00:00",
+    "status": "submitted",
+    "claimant": {"policy_number":"DEMO-003","incident_date":"2025-10-18","location":"Demo car park","description":"My parked bumper was scraped.","email":"driver@example.invalid","injury_status":"no"},
+    "document_count": 2,
+    "missing_documents": [],
+    "quote_versions": 2,
+    "next_action": {"owner":"claims_team","message":"The claims team has the requested paperwork and will review the claim."},
+    "category": {"recommendation":"routine_processing","effective_recommendation":"routine_processing","policy_version":"v1","rule_id":"v1.3","revision":2}
+  }],
+  "next_cursor": null
+}
+```
+
+Render `category.effective_recommendation` as the current insurer decision. Keep the original engine result in `category.recommendation`. For an older submission with no evidence assessment, `recommendation` and `rule_id` are null. Its effective decision stays null until staff categorize it. The detail response includes original filenames and, when available, the quote and engine histories. Quote positions identify the stored original. The claimant's private link returns filing guidance separately.
+
+Use the latest `category.revision` and `policy_version` when saving a decision. The revision includes the number of received documents and the number of recorded staff corrections. A subsequent garage upload expires an earlier override and retains it in the audit history. Generate one request ID per action and reuse it for retries. A changed request with the same ID or a stale revision returns 409. Reload the claim before asking staff to review the new evidence. Missing or wrong staff credentials return 403. An unknown reference or missing attachment returns 404. The older `/api/claims/{id}/corrections` route serves the fictional policy queue. All `CLM-…` corrections use `/api/staff/corrections`.
+
+Example server-side call after checking the insurer session:
+
+```javascript
+const response = await fetch(new URL("/api/staff/inbox", staffApiOrigin), {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ reviewer_key: reviewerKeyFromServerSecrets, limit: 25 })
+});
+if (!response.ok) throw new Error("Could not load the insurer inbox.");
+const { claims, next_cursor } = await response.json();
+```
+
+See the [staff database setup](db/README.md#install-the-insurer-inbox) for migration order and the scoped gateway.
 
 ## Connect the reviewer chat
 
