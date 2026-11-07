@@ -10,6 +10,14 @@
 -- Tabellen
 -- ---------------------------------------------------------------------------
 
+-- Fictional, structured claim inputs for the reviewer detail screen. Labels stay separate.
+create table if not exists public.claims (
+  case_id text primary key,
+  case_status text not null check (case_status in ('open', 'closed')),
+  claim_summary text not null,
+  source_fields jsonb not null check (jsonb_typeof(source_fields) = 'object')
+);
+
 -- Ein Engine-Ergebnis pro Fall und Policy-Version (1:1 das JSON aus dem Contract).
 create table if not exists public.decisions (
   case_id          text        not null,
@@ -19,7 +27,7 @@ create table if not exists public.decisions (
   matched_rule     text        not null,                       -- v1: v1.1 | v1.2 | v1.3 | v1.missing
   supporting_facts jsonb       not null default '{}'::jsonb,   -- entscheidende Fakten, normalisiert (bool, Zahl, null = unbekannt)
   explanation      text        not null,                       -- ein englischer Satz für Reviewer
-  policy_clause    text,                                       -- OFFEN (Frage an A): Klauseltext zu matched_rule, nicht im Engine-JSON
+  policy_clause    text,                                       -- original policy text for matched_rule
   created_at       timestamptz not null default now(),
   primary key (case_id, policy_version)
 );
@@ -73,8 +81,7 @@ select
   d2.matched_rule                                as rule_v2,
   d1.explanation                                 as explanation_v1,
   d2.explanation                                 as explanation_v2,
-  (d1.recommendation is not null and d2.recommendation is not null
-     and d1.recommendation <> d2.recommendation) as changed,
+  (d1.recommendation <> d2.recommendation)           as changed,
   case when coalesce(d1.case_status, d2.case_status) = 'closed' then false
        when d2.recommendation is null then null            -- v2 steht noch aus
        else d1.recommendation <> d2.recommendation end     as needs_recheck,
@@ -145,8 +152,9 @@ select
                      and v.expected <> 'routine_processing')      as incorrect_routine,
   count(*) filter (where d.recommendation = 'human_review'
                      and v.expected <> 'human_review')            as unnecessary_review,
-  round(count(*) filter (where d.recommendation <> v.expected)::numeric
-        / nullif(count(*), 0), 4)                                 as error_rate
+  case when count(d.case_id) = count(*) then
+    round(count(*) filter (where d.recommendation <> v.expected)::numeric
+          / nullif(count(*), 0), 4) end                           as error_rate
 from public.validation_results v
 left join public.decisions d
   on d.case_id = v.case_id and d.policy_version = v.policy_version
@@ -159,14 +167,16 @@ select 'open_claims' as key, 'Open claims' as label,
   from public.v_compare
 union all
 select 'needs_recheck', 'Open claims needing a second look',
-       count(*) filter (where needs_recheck)::numeric, 'claims', null
+       case when bool_and(recommendation_v2 is not null) then
+         count(*) filter (where needs_recheck)::numeric end, 'claims', null
   from public.v_compare
 union all
 select 'closed_changed', 'Closed claims changed by v2',
+       case when bool_and(recommendation_v2 is not null) then
        (count(*) filter (where case_status = 'closed' and changed)
         + (select count(*) from public.overrides o
              join public.decisions d using (case_id, policy_version)
-            where d.case_status = 'closed'))::numeric,
+            where d.case_status = 'closed'))::numeric end,
        'claims', 0
   from public.v_compare
 union all
@@ -174,7 +184,8 @@ select 'overrides', 'Reviewer corrections', count(*)::numeric, 'corrections', nu
   from public.overrides
 union all
 select 'error_rate_' || policy_version, 'Error rate ' || policy_version,
-       round(sum(errors)::numeric / nullif(sum(cases), 0), 4), 'ratio', 0
+       case when sum(decided) = sum(cases) then
+         round(sum(errors)::numeric / nullif(sum(cases), 0), 4) end, 'ratio', 0
   from public.v_error_rate
  group by policy_version
 union all
@@ -185,11 +196,14 @@ select key, label, value, unit, null
 -- Row Level Security: Lesen für alle, Insert nur auf overrides.
 -- Service Role (engine, validator) umgeht RLS.
 -- ---------------------------------------------------------------------------
+alter table public.claims             enable row level security;
 alter table public.decisions          enable row level security;
 alter table public.overrides          enable row level security;
 alter table public.validation_results enable row level security;
 alter table public.business_metrics   enable row level security;
 
+drop policy if exists "read all" on public.claims;
+create policy "read all" on public.claims for select to anon, authenticated using (true);
 drop policy if exists "read all" on public.decisions;
 create policy "read all" on public.decisions          for select to anon, authenticated using (true);
 drop policy if exists "read all" on public.overrides;
@@ -207,9 +221,21 @@ create policy "insert open claims" on public.overrides for insert to anon, authe
      where d.case_id = overrides.case_id
        and d.policy_version = overrides.policy_version
        and d.case_status = 'open'
+       and d.recommendation = overrides.original_recommendation
+       and overrides.corrected_recommendation in ('routine_processing','request_information','human_review')
+       and nullif(trim(overrides.request_id), '') is not null
   ));
 
-grant select on public.decisions, public.overrides, public.validation_results, public.business_metrics,
+-- Existing Supabase installations can give new tables broad default privileges.
+-- Restrict only Policy Replay objects; browser edits are append-only.
+revoke all privileges on public.claims, public.decisions, public.overrides, public.validation_results,
+  public.business_metrics, public.v_compare, public.v_transition, public.v_rule_impact,
+  public.v_change_check, public.v_error_rate, public.v_kpis from public, anon, authenticated;
+revoke all privileges on sequence public.overrides_id_seq from public, anon, authenticated;
+grant usage on sequence public.overrides_id_seq to anon, authenticated;
+grant select, insert, update on public.claims, public.decisions, public.validation_results to service_role;
+
+grant select on public.claims, public.decisions, public.overrides, public.validation_results, public.business_metrics,
                 public.v_compare, public.v_transition, public.v_rule_impact, public.v_change_check,
                 public.v_error_rate, public.v_kpis
   to anon, authenticated;
