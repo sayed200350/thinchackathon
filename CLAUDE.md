@@ -19,6 +19,8 @@ Kurzfassung:
 - **Gateway:** Pro Person kommuniziert nur der Team Lead (`<PERSON>-lead`) nach außen über `team/inbox/`. Teammates nutzen die lokale Agent-Team-Mailbox, schreiben nie in `team/inbox/` und melden Bedarf an andere Personen ihrem Lead.
 - **Nur der Lead committet und pusht.** Commit-Format `[<PERSON>/<agent>] ...`.
 - Nie zwei Teammates an derselben Datei. Nur in eigenen Ordnern arbeiten.
+- `app/` ist das Submodule `rafik-324/thinc-hack` (Lovable, gehört B): nur über Lovable ändern. Agents lesen `app/` nur, nie darin committen. Nach `git pull` immer `git submodule update --init`.
+- Datenbank: eigenes Supabase-Projekt, Schema in `contract/db/` (gemeinsam). Keys nur in `.env` (Vorlage `.env.example`), nie committen.
 - Nachrichten nur bei contract-Änderung, Blocker, Handoff oder Frage, gebündelt. Status gehört in `team/status/`.
 - Jede Nachricht hat genau einen Empfänger. „An alle“ nur bei `contract/`-Änderungen (Kopie in die Inbox der anderen aktiven Person).
 - Vor einer `contract/`-Änderung alle betroffenen Personen per Nachricht informieren + Datei in `team/decisions/`.

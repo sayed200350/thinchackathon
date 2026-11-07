@@ -25,7 +25,7 @@ Ordnerbesitz: siehe [areas.md](areas.md). Identität: `TEAM_PERSON` in `.claude/
 ## Sync
 - **Wann:** Start einer Session, nach jedem abgeschlossenen Task, vor jeder Änderung an `contract/`.
 - **Ablauf:**
-  1. `git pull --rebase --autostash`
+  1. `git pull --rebase --autostash`, danach `git submodule update --init` (`app/` ist Submodule, nur über Lovable ändern)
   2. eigene Inbox `team/inbox/<ICH>/` lesen
   3. Erledigtes nach `team/inbox/<ICH>/done/` verschieben (`git mv`)
   4. eigene Statusdatei `team/status/<ICH>.md` aktualisieren
