@@ -1,0 +1,16 @@
+{
+  "case_id": "DEV-001",
+  "case_status": "open",
+  "policy_version": "v1",
+  "recommendation": "routine_processing",
+  "matched_rule": "TBD (Regel aus Policy v1)",
+  "supporting_facts": {
+    "claim_type": "motor_own_damage",
+    "repair_type": "standard",
+    "quote_eur": 650,
+    "incident_report_present": true,
+    "itemized_quote_present": true,
+    "injury_reported": false
+  },
+  "explanation": "Parkschaden 650 EUR mit vollständigen Unterlagen: Routinebearbeitung unter v1."
+}

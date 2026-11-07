@@ -1,0 +1,13 @@
+case_id,case_status,claim_summary,policy_active_on_incident,claim_type,repair_type,quote_eur,incident_report_present,itemized_quote_present,injury_reported,liability_disputed,duplicate_flag,evidence_conflict
+PRA-001,open,Windshield repair with complete evidence.,True,motor_own_damage,standard,320,True,True,False,False,False,False
+PRA-002,open,"Panel repair at €1,200 with complete evidence.",True,motor_own_damage,standard,1200,True,True,False,False,False,False
+PRA-003,open,"Panel repair at €1,201 with complete evidence.",True,motor_own_damage,standard,1201,True,True,False,False,False,False
+PRA-004,open,"Repair quote at €1,450, complete evidence.",True,motor_own_damage,standard,1450,True,True,False,False,False,False
+PRA-005,open,EV high-voltage battery service at €700.,True,motor_own_damage,ev_high_voltage_battery,700,True,True,False,False,False,False
+PRA-006,open,Battery service with no itemized quote.,True,motor_own_damage,ev_high_voltage_battery,700,True,False,False,False,False,False
+PRA-007,open,Claimant reports injury; incident report missing.,True,motor_own_damage,standard,800,False,True,True,False,False,False
+PRA-008,open,"Damage looks routine, but policy had expired.",False,motor_own_damage,standard,500,True,True,False,False,False,False
+PRA-009,closed,"Closed claim at €1,350, complete evidence.",True,motor_own_damage,standard,1350,True,True,False,False,False,False
+PRA-010,closed,Closed EV battery repair at €900.,True,motor_own_damage,ev_high_voltage_battery,900,True,True,False,False,False,False
+PRA-011,open,"Quote says €900; claim form says €1,900.",True,motor_own_damage,standard,900,True,True,False,False,False,True
+PRA-012,open,New claim with missing incident report and itemized quote.,True,motor_own_damage,standard,800,False,False,False,False,False,False
