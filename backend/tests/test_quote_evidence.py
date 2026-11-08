@@ -18,10 +18,11 @@ def attachment(content, name='garage.pdf'):
 
 @unittest.skipUnless(shutil.which('pdftotext') and shutil.which('pdfinfo'), 'Poppler required')
 class QuoteEvidenceTests(unittest.TestCase):
-    def test_judges_four_documents_replay_v1_without_changing_other_facts(self):
+    def test_judges_sample_documents_replay_v1_without_changing_other_facts(self):
         expected = {
             'total-only-890.pdf': (890, False, 'needs_clarification', 'request_information', 'v1.2'),
             'itemized-890.pdf': (890, True, 'verified', 'routine_processing', 'v1.3'),
+            'itemized-1300.pdf': (1300, True, 'verified', 'routine_processing', 'v1.3'),
             'itemized-1800.pdf': (1800, True, 'verified', 'human_review', 'v1.1'),
             'unreadable-total.pdf': (None, True, 'needs_clarification', 'request_information', 'v1.missing'),
         }

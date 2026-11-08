@@ -14,7 +14,7 @@ from .intake import _validate_document
 from .store import RequestError
 
 
-QUOTE_EXAMPLES = ('total-only-890.pdf', 'itemized-890.pdf', 'itemized-1800.pdf', 'unreadable-total.pdf')
+QUOTE_EXAMPLES = ('total-only-890.pdf', 'itemized-890.pdf', 'itemized-1300.pdf', 'itemized-1800.pdf', 'unreadable-total.pdf')
 DEMO_CASES = Path(__file__).resolve().parents[1] / 'data/taktile/labelled_development_cases.csv'
 TOTAL_LABEL = re.compile(r'^(?:(?:grand|gross|quote|estimate)\s+total|total(?: amount| incl\.? VAT)?|'
                          r'gesamtbetrag|gesamtsumme|endbetrag|bruttobetrag|gesamt(?: brutto)?)\s*[:\-]?\s*(.*)$',

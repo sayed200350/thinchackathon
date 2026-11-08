@@ -396,7 +396,7 @@
       }
 
       function privateURL() {
-        const url = new URL('/chat', location.origin);
+        const url = new URL(location.pathname === '/judge/chat' ? '/judge/chat' : '/chat', location.origin);
         url.hash = 'claim=' + token;
         return url.href;
       }
@@ -453,7 +453,7 @@
       }
 
       async function api(path, body, base = '/api/intakes/') {
-        const resp = await fetch(base + path, {
+        const resp = await fetch((location.pathname === '/judge/chat' ? '/judge' : '') + base + path, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -616,6 +616,7 @@
         for (const [name, label] of [
           ['total-only-890.pdf', '€890 total only'],
           ['itemized-890.pdf', '€890 itemized'],
+          ['itemized-1300.pdf', '€1,300 itemized'],
           ['itemized-1800.pdf', '€1,800 itemized'],
           ['unreadable-total.pdf', 'Unreadable total']
         ]) {
@@ -631,8 +632,9 @@
       }
 
       function drawWelcome(card) {
-        if (new URLSearchParams(location.search).get('demo') === 'DEV-003') {
+        if (location.pathname === '/judge/chat' || new URLSearchParams(location.search).get('demo') === 'DEV-003') {
           heading(card, 'Try the €890 bumper claim', 'Fictional demo DEV-003 comes with an incident report. Upload a garage quote to see whether it answers the reviewer’s question.');
+          if (location.pathname === '/judge/chat') card.append(el('p', 'help', 'Judges can open this fictional claim and its files. Use the sample documents below.'));
           card.append(button('Start sample claim', 'primary', () => {
             demoCase = 'DEV-003';
             values = {
@@ -642,6 +644,10 @@
             };
             setStep(docsStep);
           }));
+          const report = el('a', 'sample', 'Download sample incident report');
+          report.href = '/sample-accident-report.pdf';
+          report.download = 'sample-accident-report.pdf';
+          card.append(report);
           sampleQuotes(card);
           return;
         }
@@ -691,6 +697,11 @@
         german.download = 'accident-report-de.pdf';
         const examples = el('div', 'sample-links');
         examples.append(sample, german);
+        if (document.body.dataset.judgeRoom) {
+          const judge = el('a', 'sample', 'Start a judge demo claim');
+          judge.href = '/judge/chat';
+          examples.append(judge);
+        }
         card.append(drop, actions, examples);
       }
 
@@ -1663,7 +1674,7 @@
           if (demoCase === 'DEV-003') {
             const reviewer = el('a', 'sample', 'Open reviewer evidence');
             reviewer.href = '/reviewer/evidence?reference=' + encodeURIComponent(receipt.reference);
-            card.append(reviewer);
+            if (location.pathname !== '/judge/chat') card.append(reviewer);
             sampleQuotes(card);
           }
         }
