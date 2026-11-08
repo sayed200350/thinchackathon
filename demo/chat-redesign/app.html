@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Retakt</title>
+<link rel="stylesheet" href="/retakt.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
+  .view { flex: 1; min-height: 0; display: none; }
+  .view.on { display: block; }
+  #new iframe { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+  #claims { overflow-y: auto; padding: 22px 18px 18px; }
+  .eyebrow { font: 500 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+  h1 { font-size: 30px; font-weight: 500; letter-spacing: -.02em; margin: 6px 0 18px; }
+  .list { display: grid; gap: 10px; }
+  .item { all: unset; box-sizing: border-box; display: grid; gap: 6px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); cursor: pointer; }
+  .item:focus-visible, .tab:focus-visible, .back:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .id { font: 500 13px var(--font-mono); }
+  .sub { color: var(--muted-foreground); font-size: 14px; line-height: 1.4; }
+  .badge { font: 500 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--decision-standard-line); background: var(--decision-standard-soft); white-space: nowrap; }
+  .badge.fast { color: var(--decision-fast); border-color: var(--decision-fast-line); background: var(--decision-fast-soft); }
+  .badge.reject { color: var(--decision-reject); border-color: var(--decision-reject-line); background: var(--decision-reject-soft); }
+  .back { all: unset; cursor: pointer; font: 500 12px var(--font-mono); color: var(--muted-foreground); margin-bottom: 14px; display: inline-block; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 16px 0 0; font-size: 14px; }
+  dt { color: var(--muted-foreground); } dd { margin: 0; text-align: right; }
+  .note, .empty { color: var(--muted-foreground); font-size: 14px; padding: 18px 0; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 14px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--background); }
+  .tab { all: unset; box-sizing: border-box; text-align: center; padding: 11px; border-radius: 999px; border: 1px solid var(--border); font: 500 12px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+</style>
+</head>
+<body>
+<section class="view on" id="new" aria-label="New claim"><iframe id="intake" title="New claim"></iframe></section>
+<section class="view" id="claims" aria-label="My claims"></section>
+<nav class="tabs" role="tablist" aria-label="Retakt">
+  <button class="tab" role="tab" id="tab-new" aria-selected="true" type="button">New claim</button>
+  <button class="tab" role="tab" id="tab-claims" aria-selected="false" type="button">My claims</button>
+</nav>
+<script>
+'use strict';
+const API = new URLSearchParams(location.search).get('api') || '';
+const $ = (id) => document.getElementById(id);
+const status = {
+  routine_processing: ['Being processed', 'fast'],
+  request_information: ['More information needed', ''],
+  human_review: ['Under review by a person', 'reject']
+};
+function node(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+function badge(route) { const [label, cls] = status[route] || [route, '']; return node('span', 'badge ' + cls, label); }
+async function get(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error('Could not load your claims. Please try again.');
+  return r.json();
+}
+function select(name) {
+  for (const t of ['new', 'claims']) {
+    $('tab-' + t).setAttribute('aria-selected', String(t === name));
+    $(t).classList.toggle('on', t === name);
+  }
+  if (name === 'new' && !$('intake').getAttribute('src')) $('intake').setAttribute('src', '/');
+  if (name === 'claims') showList();
+}
+async function showList() {
+  const box = $('claims');
+  box.replaceChildren(node('span', 'eyebrow', 'Retakt'), node('h1', '', 'My claims'), node('p', 'empty', 'Loading…'));
+  try {
+    const { claims } = await get('/api/claims');
+    const list = node('div', 'list');
+    for (const c of claims) {
+      const b = node('button', 'item'); b.type = 'button';
+      const row = node('div', 'row'); row.append(node('span', 'id', c.case_id), badge(c.effective_recommendation));
+      b.append(row, node('span', 'sub', c.case_status === 'closed' ? 'Closed' : 'Open'));
+      b.addEventListener('click', () => showDetail(c.case_id));
+      list.append(b);
+    }
+    box.replaceChildren(node('span', 'eyebrow', 'Retakt'), node('h1', '', 'My claims'),
+      claims.length ? list : node('p', 'empty', 'You have not submitted a claim yet.'));
+  } catch (e) { box.replaceChildren(node('span', 'eyebrow', 'Retakt'), node('h1', '', 'My claims'), node('p', 'note', e.message)); }
+}
+async function showDetail(id) {
+  const box = $('claims');
+  const back = node('button', 'back', '← All claims'); back.type = 'button'; back.addEventListener('click', showList);
+  box.replaceChildren(back, node('p', 'empty', 'Loading…'));
+  try {
+    const d = await get('/api/claims/' + encodeURIComponent(id));
+    const rows = [['Claim', d.claim.case_id], ['Status', d.claim.case_status === 'closed' ? 'Closed' : 'Open'],
+      ['Repair quote', '€' + d.claim.quote_eur]];
+    const dl = node('dl');
+    for (const [k, v] of rows) dl.append(node('dt', '', k), node('dd', '', v));
+    const head = node('div', 'row'); head.append(node('h1', '', id), badge(d.effective_recommendation));
+    box.replaceChildren(back, head, node('p', 'sub', d.claim.claim_summary || ''),
+      node('p', 'sub', d.decision && d.decision.explanation ? d.decision.explanation : ''), dl);
+  } catch (e) { box.replaceChildren(back, node('p', 'note', e.message)); }
+}
+$('tab-new').addEventListener('click', () => select('new'));
+$('tab-claims').addEventListener('click', () => select('claims'));
+select('new');
+</script>
+</body>
+</html>

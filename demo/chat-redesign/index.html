@@ -193,8 +193,7 @@ function button(label, className, action) {
 }
 function announce(text) { el('status').textContent = text; }
 function remember() {
-  try { sessionStorage.setItem(storageKey,JSON.stringify({caseId,turns:turns.filter(t => t.reply).slice(-20)})); }
-  catch (_) { /* Chat remains usable with browser storage disabled. */ }
+  // Intentionally not persisted: a reload starts a fresh chat.
 }
 function restore() {
   try {
@@ -453,7 +452,8 @@ el('reset').addEventListener('click',() => {
   caseId = null; turns = []; question.value = ''; remember(); render(); resize(); question.focus();
   announce('New conversation.');
 });
-restore(); render(); resize();
+try { sessionStorage.removeItem(storageKey); } catch (_) { /* nothing stored */ }
+render(); resize();  // every reload starts with an empty chat
 if (turns.length) el('scroller').scrollTop = el('scroller').scrollHeight;
 </script>
 <script>document.getElementById('evidence-link').href = API + '/reviewer/evidence';</script>

@@ -65,12 +65,6 @@
       <span class="eyebrow">Mobile app preview</span>
       <h1>Retakt</h1>
     </div>
-    <div class="screens" id="screens" role="group" aria-label="Choose a screen">
-      <button type="button" data-src="/reviewer" aria-pressed="true">Reviewer chat</button>
-      <button type="button" data-src="/" aria-pressed="false">Report claim</button>
-      <button type="button" data-src="/garage" aria-pressed="false">Garage</button>
-      <button type="button" data-src="/reviewer/evidence" aria-pressed="false">Evidence</button>
-    </div>
     <div class="fit" id="fit">
       <div class="phone">
         <div class="screen">
@@ -83,7 +77,7 @@
               <svg viewBox="0 0 27 13" style="height:13px"><rect x=".5" y=".5" width="22" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".45"/><rect x="2" y="2" width="19" height="9" rx="2.2"/><rect x="24" y="4.2" width="2" height="4.6" rx="1" opacity=".45"/></svg>
             </div>
           </div>
-          <iframe id="frame" src="/reviewer" title="Reviewer chat" allow="clipboard-write"></iframe>
+          <iframe id="frame" src="/app" title="Retakt" allow="clipboard-write"></iframe>
           <div class="home"><span></span></div>
         </div>
       </div>
@@ -158,17 +152,6 @@
       const d = new Date();
       document.getElementById('clock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
     }
-    /* Bildschirm wechseln (merkt sich die Auswahl im URL-Hash, z. B. #/reviewer) */
-    const frame = document.getElementById('frame'), screens = document.querySelectorAll('#screens button');
-    function show(src) {
-      const target = [...screens].find(b => b.dataset.src === src) || screens[0];
-      screens.forEach(b => b.setAttribute('aria-pressed', String(b === target)));
-      frame.title = target.textContent;
-      if (frame.getAttribute('src') !== target.dataset.src) frame.setAttribute('src', target.dataset.src);
-      history.replaceState(null, '', '#' + target.dataset.src);
-    }
-    screens.forEach(b => b.addEventListener('click', () => show(b.dataset.src)));
-    show(location.hash.slice(1));
     addEventListener('resize', resize); resize(); tick(); setInterval(tick, 20000);
   </script>
 </body>
