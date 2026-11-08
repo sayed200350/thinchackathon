@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 
 HERE = Path(__file__).resolve().parent
 PAGES = {  # Pfad -> Datei im Redesign-Ordner (nur wenn die Datei existiert, sonst Backend-Original)
-    "/": "intake.html", "/chat": "intake.html",
+    "/": "mobile.html", "/chat": "intake.html",  # "/" = the app inside the phone wrapper
     "/app": "app.html", "/reviewer": "index.html", "/reviewer/evidence": "evidence.html", "/garage": "garage.html",
 }
 STATIC = {"/retakt.css": "text/css; charset=utf-8", "/mobile.html": "text/html; charset=utf-8", "/index.html": "text/html; charset=utf-8"}
