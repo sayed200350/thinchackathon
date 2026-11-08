@@ -157,7 +157,7 @@ def answer(store, body):
     response["case_id"] = selected
     intent = chat_providers.classify_intent(message, history, INTENTS)
     if intent in INTENTS:
-        response["model_usage"]["intent"] = "Jev"
+        response["model_usage"]["intent"] = chat_providers.provider_name("intent")
     else:
         intent = local_intent(message, history)
     scenario_message = message
@@ -194,10 +194,19 @@ def answer(store, body):
             response["evidence"] = [{"label": "Source", "value": "Current claims queue"}]
         elif intent == "replay":
             counts = store.preview()
-            response["answer"] = (f'The official {counts["to_version"]} policy change is pending. '
-                                  'There is no measured before-and-after result yet. '
-                                  'I can run a hypothetical repair quote using v1.')
-            response["evidence"] = [{"label": "Policy preview", "value": counts["status"]}]
+            run = counts.get("latest_run")
+            if run:
+                response["answer"] = (f'Policy {run["version"]} was applied to the open claims: {run["changed"]} of '
+                                      f'{run["open_evaluated"]} changed their recommendation compared with {run["baseline_version"]}, '
+                                      f'and {run["needs_recheck"]} need a second look.')
+                response["evidence"] = [{"label": "Policy run", "value": f'{run["baseline_version"]} → {run["version"]}'},
+                                        {"label": "Changed", "value": str(run["changed"])},
+                                        {"label": "Need a second look", "value": str(run["needs_recheck"])}]
+            else:
+                response["answer"] = (f'The official {counts["to_version"]} policy change is pending. '
+                                      'There is no measured before-and-after result yet. '
+                                      'I can run a hypothetical repair quote using v1.')
+                response["evidence"] = [{"label": "Policy preview", "value": counts["status"]}]
         else:
             response["answer"] = "I can explain a claim, show its evidence, test a repair quote or newly received document, or open a reviewer correction."
         return response
@@ -279,7 +288,7 @@ def answer(store, body):
     picked = chat_providers.compose_answer(message, history, options)
     if picked and all(key in options for key in picked):
         optional = [options[key] for key in picked]
-        response["model_usage"]["answer"] = "GPT"
+        response["model_usage"]["answer"] = chat_providers.provider_name("answer")
     else:
         optional = [options["rule"]]
     response["answer"] = f"{selected} — " + " ".join(mandatory + optional)

@@ -120,7 +120,7 @@
     .compose-wrap { padding-block: 10px max(14px, env(safe-area-inset-bottom)); }
     .composer { display: flex; align-items: end; gap: 8px; border-radius: 14px; padding: 8px; }
     .composer:focus-within { border-color: var(--decision-standard-line); }
-    .composer textarea { display: block; width: 100%; flex: 1; resize: none; padding: 6px 8px; border: 0; line-height: 1.4; background: transparent; min-height: 37px; max-height: 120px; }
+    .composer textarea { display: block; width: 100%; flex: 1; resize: none; padding: 6px 8px; border: 0; line-height: 1.4; background: transparent; height: 37px !important; min-height: 37px; max-height: 37px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .composer textarea:focus-visible { outline: none; }
     .composer textarea::placeholder { color: var(--muted-foreground); }
     .send { min-width: 72px; height: 37px; }
@@ -145,7 +145,7 @@
       <section class="welcome" id="welcome">
         <span class="eyebrow" style="border:0;padding:0">Claims review</span>
         <h1>Ask about a claim.</h1>
-        <div class="starters" id="starters" aria-label="Suggested questions"></div>
+        <div class="starters" id="starters" aria-label="What would you like to do?"></div>
       </section>
       <section class="conversation" id="transcript" aria-label="Conversation" hidden></section>
     </div>
@@ -171,9 +171,9 @@ const question = el('question');
 const storageKey = 'policy-replay.reviewer-chat.v1';
 const routes = {routine_processing:'Routine processing', request_information:'Request information', human_review:'Human review'};
 const starters = [
-  'Why does DEV-002 need more information?',
-  'Why is DEV-001 ready for routine processing?',
-  'What changed in policy v2?'
+  {label:'Submit a claim', href:'/'},
+  {label:'Check my claim status', ask:'What is the status of DEV-002?'},
+  {label:'Ask about the policy', ask:'What changed in policy v2?'}
 ];
 let caseId = null;
 let turns = [];
@@ -435,8 +435,8 @@ function resize() {
   question.style.height = Math.min(question.scrollHeight,120) + 'px';
   updateFrame();
 }
-for (const text of starters) {
-  const item = button(text,'starter',() => start(text));
+for (const action of starters) {
+  const item = button(action.label,'starter',() => { if (action.href) location.href = action.href; else start(action.ask); });
   const arrow = node('span','arrow','↗'); arrow.setAttribute('aria-hidden','true'); item.append(arrow);
   el('starters').append(item);
 }

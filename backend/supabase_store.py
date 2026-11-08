@@ -132,8 +132,19 @@ class SupabaseStore:
 
     def preview(self):
         statuses = [row['case_status'] for row in self._rows('claims', {'select': 'case_id,case_status'}, 'case_id')]
-        return {'status': 'awaiting_v2', 'from_version': 'v1', 'to_version': 'v2',
-                'open_claims': statuses.count('open'), 'closed_claims': statuses.count('closed'), 'changes': None}
+        result = {'status': 'awaiting_v2', 'from_version': 'v1', 'to_version': 'v2',
+                  'open_claims': statuses.count('open'), 'closed_claims': statuses.count('closed'), 'changes': None}
+        try:
+            runs, _ = self._request('policy_runs', {
+                'select': 'version,baseline_version,changed,needs_recheck,open_evaluated',
+                'order': 'created_at.desc', 'limit': 1})
+        except RequestError:
+            return result  # Table not installed yet: the policy change simply is not applied.
+        if isinstance(runs, list) and runs and isinstance(runs[0], dict) and runs[0].get('version'):
+            # Extra key only: `status` and `changes` keep their documented meaning for existing readers.
+            result['latest_run'] = {key: runs[0].get(key) for key in (
+                'version', 'baseline_version', 'changed', 'needs_recheck', 'open_evaluated')}
+        return result
 
     def save_correction(self, case_id, body):
         values, expected = validate_correction(body)

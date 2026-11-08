@@ -75,6 +75,15 @@ class ChatTests(unittest.TestCase):
         self.assertNotIn('declare a new recommendation', result['answer'])
         self.assertEqual(result['model_usage']['answer'], 'policy engine')
 
+    def test_applied_policy_run_replaces_pending_answer(self):
+        run = {'version': 'v2', 'baseline_version': 'v1', 'changed': 6, 'needs_recheck': 6, 'open_evaluated': 24}
+        preview = dict(self.db.preview(), latest_run=run)
+        with patch.object(type(self.db), 'preview', return_value=preview):
+            result = self.ask('What changed in v2?')
+        self.assertIn('6 of 24', result['answer'])
+        self.assertNotIn('pending', result['answer'])
+        self.assertIn('Policy run', [row['label'] for row in result['evidence']])
+
     def test_case_switch_queue_and_pending_policy(self):
         self.assertEqual(self.ask('Explain PRA-005', 'DEV-001')['case_id'], 'PRA-005')
         self.assertIsNone(self.ask('Explain DEV-999', 'DEV-001')['case_id'])

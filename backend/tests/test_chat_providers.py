@@ -17,6 +17,47 @@ def completed(ids):
             "content": [{"type": "output_text", "text": json.dumps({"statement_ids": ids})}]}]}
 
 
+GEMINI_ENV = {"AI_PROVIDER": "gemini", "AI_API_KEY": "k", "AI_MODEL": "gemini-test",
+              "AI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta"}
+
+
+def gemini_reply(value):
+    return {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": json.dumps(value)}]}}]}
+
+
+class GeminiTests(unittest.TestCase):
+    def test_intent_and_answer_use_gemini_when_only_ai_settings_exist(self):
+        with patch.dict(os.environ, GEMINI_ENV, clear=True), \
+                patch.object(providers, "_post", return_value=gemini_reply({"intent": "what_if"})) as post:
+            self.assertEqual(providers.classify_intent("What about 1501?", HISTORY, INTENTS), "what_if")
+        host, path, key, payload, _timeout = post.call_args.args
+        self.assertEqual((host, path, key), ("generativelanguage.googleapis.com", "/v1beta/models/gemini-test:generateContent", "k"))
+        self.assertEqual(post.call_args.kwargs, {"auth_header": "x-goog-api-key"})
+        self.assertNotIn("k", payload["contents"][0]["parts"][0]["text"].split())
+        with patch.dict(os.environ, GEMINI_ENV, clear=True), \
+                patch.object(providers, "_post", return_value=gemini_reply({"statement_ids": ["rule", "route"]})):
+            self.assertEqual(providers.compose_answer("Why?", HISTORY, FACTS), ["rule", "route"])
+            self.assertEqual(providers.provider_name("intent"), "Gemini")
+
+    def test_invalid_gemini_output_falls_back(self):
+        bad = [gemini_reply({"intent": "approve"}), gemini_reply({"intent": "what_if", "x": 1}), {},
+               {"candidates": [{"finishReason": "SAFETY", "content": {"parts": []}}]}]
+        for reply in bad:
+            with patch.dict(os.environ, GEMINI_ENV, clear=True), patch.object(providers, "_post", return_value=reply):
+                self.assertIsNone(providers.classify_intent("Why?", [], INTENTS))
+        for ids in (["nope"], [], ["rule", "rule"]):
+            with patch.dict(os.environ, GEMINI_ENV, clear=True), \
+                    patch.object(providers, "_post", return_value=gemini_reply({"statement_ids": ids})):
+                self.assertIsNone(providers.compose_answer("Why?", [], FACTS))
+
+    def test_unsafe_or_missing_gemini_settings_make_no_request(self):
+        for change in ({"AI_PROVIDER": "disabled"}, {"AI_API_KEY": ""}, {"AI_BASE_URL": "http://x.example/v1"},
+                       {"AI_MODEL": "a/b"}, {"AI_BASE_URL": "https://u:p@x.example"}):
+            with patch.dict(os.environ, {**GEMINI_ENV, **change}, clear=True), patch.object(providers, "_post") as post:
+                self.assertIsNone(providers.classify_intent("Why?", [], INTENTS))
+                post.assert_not_called()
+
+
 class ChatProviderTests(unittest.TestCase):
     def test_missing_credentials_require_no_network(self):
         with patch.dict(os.environ, {}, clear=True), patch.object(providers, "_post") as post:
