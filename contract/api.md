@@ -154,6 +154,17 @@ Render `answer` and each `evidence` entry (`label`, `value`) as text. Each sugge
 
 In Supabase mode the chat, correction form and claim detail all read the shared audit history. Two backends can point to the same project. The Python service must be deployed to an HTTPS endpoint for a published Lovable app to call it. Conversation text and hypothetical results remain in the browser session.
 
+## Change the AI model key (settings page)
+
+`GET /api/settings/ai` returns `provider`, `model`, `base_url`, `key_set` and `key_hint` (last four characters). The key itself never leaves the server.
+
+`POST /api/settings/ai` with `{"api_key":"..."}` checks the key with the provider (`GET {AI_BASE_URL}/models`, no generation quota). If accepted, the key applies at once to policy apply and the reviewer chat and is written to the server's `.env` as `AI_API_KEY` (other lines unchanged, mode 600). A rejected key returns 422, an unreachable provider returns 502 and nothing changes. HTTP 429 from the provider means the key is valid with no quota left: it is saved and `warning` says so.
+
+```sh
+curl -sS http://127.0.0.1:8765/api/settings/ai
+curl -sS http://127.0.0.1:8765/api/settings/ai -H 'Content-Type: application/json' -d '{"api_key":"<new key>"}'
+```
+
 ## Save and verify a reviewer correction
 
 Read DEV-001. On a fresh demo database its original recommendation is `routine_processing` and its revision is 0.

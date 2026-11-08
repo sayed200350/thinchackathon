@@ -156,6 +156,9 @@ class Handler(BaseHTTPRequestHandler):
                 raise RequestError(404, "Phone intake is disabled.")
             return 200, voice.receive(self.read_json_bytes(2 * 1024 * 1024),
                                       self.headers.get("ElevenLabs-Signature"))
+        if self.command in ("GET", "POST") and parts == ["api", "settings", "ai"]:
+            from . import settings_api
+            return settings_api.handle(self.command, self.read_json, getattr(self.server, "env_file", None))
         if self.command == "POST" and len(parts) == 4 and parts[:2] == ["api", "policies"] and parts[3] == "apply":
             from .policy_apply import Rejected, ServiceClient, apply_policy
             try:
@@ -298,6 +301,7 @@ def main():
             server.sample_pdf = (ROOT / "backend/fixtures/sample-accident-report.pdf").read_bytes()
             server.reviewer_page = Path(__file__).with_name("chat.html").read_bytes()
             server.ui_origin = args.ui_origin
+            server.env_file = args.env_file  # settings page writes the AI key back here
             print(f"Reviewer data source: {storage}", file=sys.stderr, flush=True)
             print(f"Serving Policy Replay at http://127.0.0.1:{server.server_port}", flush=True)
             stopped = server.voice.start() if server.voice else None
