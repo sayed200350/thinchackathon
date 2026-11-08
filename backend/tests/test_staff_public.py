@@ -92,12 +92,22 @@ class StaffPublicTests(unittest.TestCase):
                 self.assertEqual(self.call(method, path, data, headers)[0], expected)
         self.assertFalse(self.backend.seen)
 
+    def test_hosted_read_only_gateway_excludes_corrections(self):
+        with staff_public.create_server(0, f'http://127.0.0.1:{self.backend.server_port}', read_only=True) as gateway:
+            self.assertIn('/api/staff/policy-replay', gateway.staff_routes)
+            self.assertNotIn('/api/staff/corrections', gateway.staff_routes)
+            with serve(gateway), closing(HTTPConnection('127.0.0.1', gateway.server_port, timeout=3)) as conn:
+                conn.request('POST', '/api/staff/corrections', body=self.authorized,
+                             headers={'Content-Type':'application/json'})
+                self.assertEqual(conn.getresponse().status, 404)
+        self.assertFalse(self.backend.seen)
+
     def test_upstream_rejects_incorrect_credentials_even_for_allowed_routes(self):
         for route in staff_public.ROUTES:
             status, _, body = self.call('POST', route, b'{"reviewer_key":"wrong"}')
             self.assertEqual(status, 403)
             self.assertNotIn(b'private upstream', body)
-        self.assertEqual(len(self.backend.seen), 4)
+        self.assertEqual(len(self.backend.seen), len(staff_public.ROUTES))
 
     def test_document_and_summary_have_bounded_distinct_reply_limits(self):
         self.backend.result = 200, b'{"content_base64":"' + b'A' * 1000 + b'"}'

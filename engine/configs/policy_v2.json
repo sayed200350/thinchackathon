@@ -1,0 +1,138 @@
+{
+  "fallback": "routine_processing",
+  "policy_id": "fictional_motor_claims",
+  "precedence": [
+    "human_review",
+    "request_information",
+    "routine_processing"
+  ],
+  "rules": [
+    {
+      "id": "HR_POLICY_INACTIVE",
+      "if": {
+        "field": "policy_active_on_incident",
+        "op": "eq",
+        "value": false
+      },
+      "priority": 10,
+      "reason": "The policy was inactive on the incident date",
+      "then": "human_review"
+    },
+    {
+      "id": "HR_CLAIM_TYPE",
+      "if": {
+        "field": "claim_type",
+        "op": "ne",
+        "value": "motor_own_damage"
+      },
+      "priority": 20,
+      "reason": "The claim falls outside motor own-damage cover",
+      "then": "human_review"
+    },
+    {
+      "id": "HR_INJURY",
+      "if": {
+        "field": "injury_reported",
+        "op": "eq",
+        "value": true
+      },
+      "priority": 30,
+      "reason": "An injury was reported",
+      "then": "human_review"
+    },
+    {
+      "id": "HR_LIABILITY",
+      "if": {
+        "field": "liability_disputed",
+        "op": "eq",
+        "value": true
+      },
+      "priority": 40,
+      "reason": "Liability is disputed",
+      "then": "human_review"
+    },
+    {
+      "id": "HR_DUPLICATE",
+      "if": {
+        "field": "duplicate_flag",
+        "op": "eq",
+        "value": true
+      },
+      "priority": 50,
+      "reason": "The claim is flagged as a duplicate",
+      "then": "human_review"
+    },
+    {
+      "id": "HR_EVIDENCE_CONFLICT",
+      "if": {
+        "field": "evidence_conflict",
+        "op": "eq",
+        "value": true
+      },
+      "priority": 60,
+      "reason": "The evidence conflicts",
+      "then": "human_review"
+    },
+    {
+      "id": "HR_QUOTE_LIMIT",
+      "if": {
+        "field": "quote_eur",
+        "op": "gt",
+        "value": "1200"
+      },
+      "priority": 70,
+      "reason": "The repair quote exceeds EUR 1200",
+      "then": "human_review"
+    },
+    {
+      "id": "HR_EV_BATTERY",
+      "priority": 75,
+      "then": "human_review",
+      "reason": "High-voltage EV battery repairs require human review at any quote amount",
+      "if": {
+        "field": "repair_type",
+        "op": "eq",
+        "value": "ev_high_voltage_battery"
+      }
+    },
+    {
+      "id": "INFO_INCIDENT_REPORT_MISSING",
+      "if": {
+        "field": "incident_report_present",
+        "op": "eq",
+        "value": false
+      },
+      "priority": 80,
+      "reason": "The incident report is absent",
+      "then": "request_information"
+    },
+    {
+      "id": "INFO_ITEMIZED_QUOTE_MISSING",
+      "if": {
+        "field": "itemized_quote_present",
+        "op": "eq",
+        "value": false
+      },
+      "priority": 90,
+      "reason": "The itemized quote is absent",
+      "then": "request_information"
+    }
+  ],
+  "unknown_handling": {
+    "outcome": "request_information",
+    "required_fields": [
+      "policy_active_on_incident",
+      "claim_type",
+      "repair_type",
+      "quote_eur",
+      "incident_report_present",
+      "itemized_quote_present",
+      "injury_reported",
+      "liability_disputed",
+      "duplicate_flag",
+      "evidence_conflict"
+    ]
+  },
+  "version": "v2",
+  "source": "Motor claims change notice · policy v2"
+}

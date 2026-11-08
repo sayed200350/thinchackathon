@@ -6,6 +6,7 @@ from engine import evaluate, load_policy, parse_claim
 from engine.runtime import policy_from_dict
 from .intake import EVIDENCE_FILE_REQUEST_LIMIT
 from .store import RequestError
+from .intake_replay import replay_versions
 
 
 READS = {
@@ -16,13 +17,13 @@ READS = {
 
 
 def incoming(port, action, body, reviewer_key):
-    if action not in (*READS, 'replay'):
+    if action not in (*READS, 'replay', 'policy-replay'):
         raise RequestError(404, 'Unknown inbox action.')
     if not isinstance(body, dict):
         raise RequestError(400, 'Expected a JSON object.')
     if not reviewer_key:
         raise RequestError(503, 'The workbench is missing its connection to the staff inbox.')
-    path, fields = READS['detail' if action == 'replay' else action]
+    path, fields = READS['detail' if action in ('replay', 'policy-replay') else action]
     payload = {key: body[key] for key in fields if key in body}
     payload['reviewer_key'] = reviewer_key
     connection = HTTPConnection('127.0.0.1', port, timeout=12)
@@ -48,6 +49,8 @@ def incoming(port, action, body, reviewer_key):
         raise RequestError(503, 'The claim intake service is unavailable.') from None
     finally:
         connection.close()
+    if action == 'policy-replay':
+        return replay_versions(result, body)
     return replay(result, body) if action == 'replay' else result
 
 

@@ -78,3 +78,37 @@ class WorkbenchInboxTests(unittest.TestCase):
             handler.headers = {'Host': '127.0.0.1:8767', 'Origin': 'http://127.0.0.1:8767'}
             self.assertEqual(Handler.dispatch_request(handler), (200, {'claims': []}))
             upstream.assert_called_once_with(8766, 'list', {}, 'server-only')
+
+
+class FullPolicyReplayTests(unittest.TestCase):
+    def preview(self, **facts):
+        from backend.intake_replay import replay_versions
+        record = {**BASE, 'quote_eur': '1300', **facts}
+        saved = assess_v1(record)
+        detail = {'reference': saved['case_id'], 'category': {'revision': 1}, 'evidence': {'decision': saved}}
+        return replay_versions(detail, {'target_version': 'v2', 'expected_revision': 1})
+
+    def test_full_notice_covers_threshold_battery_and_closed_retention(self):
+        for amount, repair, expected in [('1300', 'standard', 'HR_QUOTE_LIMIT'),
+                                          ('900', 'ev_high_voltage_battery', 'HR_EV_BATTERY')]:
+            result = self.preview(quote_eur=amount, repair_type=repair)
+            self.assertEqual(result['recorded']['recommendation'], 'routine_processing')
+            self.assertEqual(result['proposed']['rule'], expected)
+            self.assertIn(expected, result['impacted_rules'])
+            self.assertTrue(result['needs_recheck'])
+        closed = self.preview(case_status='closed')
+        self.assertTrue(closed['closed_retained'])
+        self.assertFalse(closed['needs_recheck'])
+        self.assertEqual(closed['proposed'], closed['recorded'])
+
+    def test_rejects_stale_mismatched_or_unrecorded_evidence(self):
+        from backend.intake_replay import replay_versions
+        saved = assess_v1(dict(BASE, quote_eur='1300'))
+        detail = {'reference': saved['case_id'], 'category': {'revision': 2}, 'evidence': {'decision': saved}}
+        body = {'target_version': 'v2', 'expected_revision': 2}
+        for change in ({'target_version': '../v1'}, {'expected_revision': 1}):
+            with self.assertRaises(RequestError):
+                replay_versions(detail, dict(body, **change))
+        for key in ('input_fingerprint','policy_hash','case_id','primary_rule_id'):
+            with self.subTest(key=key), self.assertRaises(RequestError):
+                replay_versions(dict(detail, evidence={'decision': dict(saved, **{key: 'wrong'})}), body)
