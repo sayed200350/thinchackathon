@@ -4,6 +4,33 @@ Taktile track · thinc! hack MUC · 7–8 November 2026
 
 Policy Replay receives motor-insurance claims in a guided conversation. A claimant describes the incident, attaches evidence, checks their answers and receives a claim reference. Reviewers use a separate workspace to explore the fictional Taktile cases and replay policy decisions.
 
+The deterministic engine routes claims to `routine_processing`, `request_information`, or `human_review`. Each result records the matched rule and supporting facts. Revised evidence creates a new decision in the same claim's history; reviewer corrections remain separate from the original machine decision.
+
+## Quick start
+
+Use **Python 3.10 or newer** and run commands from the repository root. The core engine, local API and policy workbench use the Python standard library; no frontend build or API key is needed for the local walkthrough.
+
+```sh
+python3 -m backend --store sqlite
+```
+
+| Open | Purpose |
+| --- | --- |
+| [Claim intake](http://127.0.0.1:8765/chat) | File a claim, attach evidence and save a private follow-up link. |
+| [Fictional DEV-003 walkthrough](http://127.0.0.1:8765/chat?demo=DEV-003) | Rehearse the garage-quote demo below. |
+| [Reviewer chat](http://127.0.0.1:8765/reviewer) | Explain recorded demo decisions and try changes to individual facts. |
+| [Reviewer evidence](http://127.0.0.1:8765/reviewer/evidence) | Open a submitted reference with the reviewer key and inspect evidence history. |
+
+Local claim data is stored in ignored `backend/.local/reviewer.sqlite3`. The explicit `--store sqlite` keeps this walkthrough local even when `.env` contains Supabase settings. Keep the terminal open; Ctrl+C stops the service.
+
+For the separate policy workbench, run this in another terminal:
+
+```sh
+python3 -m backend.workbench_server --open
+```
+
+The [workbench](http://127.0.0.1:8767) starts empty and uses `backend/.local/workbench.sqlite3`. Upload a claim CSV and a Word or JSON policy to assess claims and preview a candidate policy. See the [workbench guide](backend/README.md).
+
 ## Demo the €890 bumper claim
 
 A garage sends a quote for €890. The chatbot reads the total and page, spots the missing breakdown, and gives the driver a request to copy to the garage. The driver submits once. Each new quote then updates the same claim, and the reviewer can show exactly which evidence changed its route.
@@ -77,54 +104,84 @@ For a live boundary test, ask about DEV-001, then try a €1,500 quote and a €
 
 To enable models for reviewer questions, set `JEV_API_KEY` and/or `OPENAI_API_KEY` in the server’s local `.env` and restart. Jev classifies the question. GPT selects verified statements for a claim explanation. The evidence panel identifies the source for each answer. [HTTP contract](contract/api.md)
 
-## Hosted database for Lovable
+## Configuration and frontend integration
 
-The original intake and reviewer API use the Thinc Supabase project. Thinc has the evidence migration and passed its rollback-only database check. To run the hosted path, provision the matching evidence service credential on the API server. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (also accepted as `SUPABASE_ANON_KEY`), then run `python3 -m backend --store supabase`. The public queue contains fictional cases. Real submissions, original files and evidence history use private tables. [Database setup and staff access](contract/db/README.md)
+Copy `.env.example` to `.env` when enabling optional integrations. Keep credentials on the server and out of version control. The claimant/reviewer service reads the root `.env` by default; `--env-file PATH` selects another file.
 
-For a rehearsal with a private SQLite copy, run `python3 -m backend --store sqlite`.
+| Integration | Configuration |
+| --- | --- |
+| Shared Supabase storage | Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (or `SUPABASE_ANON_KEY`), apply the documented migrations and provision the matching private evidence credential. Start with `python3 -m backend --store supabase`. |
+| Separate reviewer frontend | Add `--ui-origin http://localhost:5173` to permit that browser origin. |
+| Reviewer question models | Set `JEV_API_KEY` and/or `OPENAI_API_KEY`. Routing still comes from the policy engine. |
+| Phone garage uploads | Install `backend/requirements-garage.txt` and configure the garage gateway as described above. |
+| Voice and SMS | Follow [the voice setup guide](backend/VOICE.md) for ElevenLabs, Vonage and the public claimant origin. |
+| Policy-owner review | Configure `POLICY_TWIN_OWNER_TOKEN` before starting the workbench. See [the workbench guide](backend/README.md#policy-owner-review) for the review flow. |
 
-## Run the reviewer API
+With `--store auto` (the API default), configured Supabase settings select hosted storage; otherwise the service uses SQLite. The public queue contains fictional cases. Submitted claims, original files and evidence history use private tables. See [database setup and staff access](contract/db/README.md) before using shared storage.
 
-Mo’s engine evaluates the submitted claim and each revised garage quote under policy v1. The insurer can open the claim by its existing reference to inspect which rules matched, what evidence was missing, and why the recommendation changed.
+The [HTTP contract](contract/api.md) documents claim list/detail, reviewer corrections, intake, evidence and insurer access. For example, [DEV-001's API response](http://127.0.0.1:8765/api/claims/DEV-001) returns the fictional claim's recorded decision.
 
-To try a policy change locally, run `python3 -m backend --open` and open the [policy workbench](http://127.0.0.1:8767). Upload the supplied Word policy and the [synthetic claims](engine/tests/fixtures/synthetic_claims.csv) to compare decisions and download their explanations. The workbench starts empty and uses a separate SQLite database. [Workbench guide](backend/README.md)
-
-From the repository root, start the local service with Python 3.10 or newer:
+The separate frontend is a Git submodule in `app/`. Fetch it when working on that app:
 
 ```sh
-python3 -m backend --ui-origin http://localhost:5173
+git submodule update --init --recursive
 ```
 
-Open [DEV-001](http://127.0.0.1:8765/api/claims/DEV-001) to read its original decision. Rafik can connect the reviewer screen using the [API contract and correction example](contract/api.md). The [engine guide](engine/README.md) covers the CSV command and [measured v1 results](eval/v1-development.json). Run all tests with `python3 -m unittest discover -v`.
+The Python-served interfaces above work without initializing the submodule.
 
-## Start together
+## Run the policy engine
 
-Read the [Taktile brief](Usecase/20261105_Taktile_thinc%21%20Hackathon%20Case%20Study.pdf) and unpack the [participant materials](Usecase/20261105_Taktile_thinc%21%20Hackathon%20Case%20Study%20Material.zip). The pack contains policy v1, 14 labelled development claims, and 12 unlabelled practice claims.
+Inspect a development claim or export decisions with a detailed audit:
 
-In the first 15 minutes, agree on one example result containing the case ID, open/closed status, recommendation, policy version, matched rule, and supporting facts. Use **DEV-001**. Its €650 parking scrape with complete paperwork goes to `routine_processing` under v1. Sayed can implement the engine and Rafik can build the screen against that example.
+```sh
+python3 -m engine decide data/taktile/labelled_development_cases.csv DEV-001
+python3 -m engine batch engine/tests/fixtures/synthetic_claims.csv outputs/local-results.csv --audit outputs/local-audit.jsonl
+```
 
-## Two-agent build plan
-
-| Milestone | Sayed · Rules, CSV, evaluation & backend | Rafik · Reviewer app, business case & demo |
-| --- | --- | --- |
-| First working slice | Encode v1 in its specified order and read the official CSV format. Give Rafik a sample result, a command to reproduce it, and the API format for reading a decision and saving a reviewer correction. | Build the claim list and detail view. Show the decisive facts and clause. Build the correction form against Sayed’s API and display the original recommendation and audit history. |
-| Before the Saturday 18:00 rule release | Persist reviewer corrections, reviewer identity, reason and policy version in the database alongside the original decision. Evaluate v1 against all 14 labels. Check the €1,500 boundary (DEV-010), a blank quote (DEV-013), and a known injury with a blank report field (DEV-014). | Connect the screen to Sayed’s API and verify that a saved correction survives refresh. Build a cost calculator with editable assumptions for claim volume, staff time, and costs of different errors. |
-| When v2 arrives on Discord | Preserve v1 and implement the published change. Flag affected open claims. For closed claims, retain the v1 recommendation in v2 and set `needs_recheck` to `False`. | Independently work out which sample claims the new clause should affect. Compare with Sayed’s results and build **Preview policy change**, with old and new decisions, the changed clause, and the relevant fact. |
-| Sunday handoff | Deliver the batch command and a quality report for each version. Include counts and denominators for correct routing, incorrect routine routing, and unnecessary human review. Break out changed cases. Own the final merge. | Use the measured error rates to show annual cost before and after, net benefit, payback, and the cost of applying v2. Own the demo and the judge’s live override. |
-
-Work on separate branches, `codex/sayed-engine` and `codex/rafik-app`. At each handoff, share the pull request, one command or click path to try, and the expected result.
-
-## Integration checks
-
-- **Before 18:00:** Run DEV-001 from CSV to screen. Open DEV-002 and show why its missing incident report triggers `request_information`. Save a reviewer correction and reload it.
-- **After v2:** Compare the engine with Rafik’s independent expectations. Check an affected open case and a closed case. Use the unlabelled practice CSV for a fresh-file run and labelled examples for accuracy measurements.
-- **Before judging:** Rafik runs an unfamiliar CSV using Sayed’s instructions. Sayed acts as the judge and completes an override in Rafik’s UI without coaching.
-
-The judges’ batch output must use these columns in this order:
+DEV-001's €650 parking scrape with complete paperwork goes to `routine_processing` under v1. Batch CSVs use these columns in this order:
 
 ```csv
 case_id,recommendation_v1,recommendation_v2,needs_recheck,rule_v1,rule_v2,explanation
 ```
+
+To rehearse a policy comparison with an explicitly hypothetical threshold change:
+
+```sh
+python3 -m engine compare \
+  --input engine/tests/fixtures/synthetic_claims.csv \
+  --v2 engine/tests/fixtures/v2_hypothetical_threshold.json \
+  --output outputs/local-comparison.csv \
+  --audit outputs/local-comparison.jsonl \
+  --report outputs/local-impact.json
+```
+
+For an actual amendment, supply a separately versioned JSON policy citing its source. The CLI does not bundle an official v2 configuration. Open cases are flagged when the recommendation or relevant rule/evidence requirements change. Closed cases retain v1 results and `needs_recheck=False`; standalone CSV exercises have no persisted historical decision to reuse. Candidate previews do not activate a policy. See the [engine guide](engine/README.md) for version binding, validation and partial-failure behavior.
+
+## Validation
+
+```sh
+python3 -m engine validate-v1
+python3 -m engine test-policy engine/configs/policy_v1.json
+python3 -m unittest discover -v
+```
+
+The [recorded v1 development report](eval/v1-development.json) has **14/14 correct routes**, **0/14 incorrect routine referrals**, and **0/14 unnecessary human reviews**. This is a small labelled development sample. The 12 unlabelled practice claims and hypothetical candidate cases do not provide an independent accuracy measurement.
+
+Before a live demo, check the €1,500/€1,501 boundary, a missing incident report, a revised quote on the same reference, and a reviewer correction that survives refresh.
+
+## Project layout
+
+| Path | Contents |
+| --- | --- |
+| [`engine/`](engine/README.md) | Deterministic evaluation, policy configurations, explanations, audit exports and comparison CLI. |
+| [`backend/`](backend/README.md) | Claimant and reviewer services, policy workbench, storage adapters and public gateways. |
+| [`contract/`](contract/README.md) | Decision and HTTP contracts, SQL schema and migrations. |
+| `data/taktile/` | Supplied policies, labelled development claims and unlabelled practice claims. |
+| `eval/` | Recorded quality reports. |
+| [`demo/landing/`](demo/landing/README.md) and [`demo/landing-react/`](demo/landing-react/README.md) | Landing-page demo and React integration assets. |
+| `app/` | Separate reviewer frontend submodule. |
+| [`video/`](video/README.md) | Remotion video project and preview/render instructions. |
+| [`team/`](team/README.md) | Team responsibilities, decisions and handoff history. |
 
 ## Five minutes with the judges
 
