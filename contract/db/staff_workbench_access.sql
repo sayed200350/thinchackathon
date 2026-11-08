@@ -4,9 +4,16 @@ begin;
 do $policies$
 declare
   target text;
+  tables text[] := array['claims','decisions','overrides','claim_field_changes',
+                         'policies','validation_results','business_metrics'];
 begin
-  foreach target in array array['claims','decisions','overrides','claim_field_changes',
-                                'policies','validation_results','business_metrics'] loop
+  -- Newer deployments also keep the engine configuration and replay output in two tables.
+  foreach target in array array['policy_configs','policy_runs'] loop
+    if to_regclass(format('public.%I', target)) is not null then
+      tables := array_append(tables, target);
+    end if;
+  end loop;
+  foreach target in array tables loop
     execute format('alter table public.%I enable row level security', target);
     execute format('drop policy if exists workbench_staff_only on public.%I', target);
     execute format($sql$

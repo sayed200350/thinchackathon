@@ -87,4 +87,4 @@ SQL
 
 ### Staged workbench access change
 
-`staff_workbench_access.sql` is an opt-in migration for the seven Retakt workbench tables and the existing claim-field editor. Apply it after migrating the older anonymous reviewer queue to a staff-authenticated connection. It requires trusted `app_metadata.staff = true` for ordinary authenticated users and preserves the existing policy-version and claim-edit checks. The local judge room uses a separate temporary SQLite database. The migration does not assign user roles.
+`staff_workbench_access.sql` is an opt-in migration for the seven Retakt workbench tables and the existing claim-field editor. It also covers the newer policy configurations and run history when those tables are installed. Apply it after migrating the older anonymous reviewer queue to a staff-authenticated connection. It requires trusted `app_metadata.staff = true` for ordinary authenticated users and preserves the existing policy-version and claim-edit checks. The local judge room uses a separate temporary SQLite database. The migration does not assign user roles.
