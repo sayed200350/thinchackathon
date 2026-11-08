@@ -29,6 +29,19 @@
   .send { all: unset; box-sizing: border-box; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); cursor: pointer; font-size: 17px; }
   .send:disabled { opacity: .35; cursor: default; }
   .send:focus-visible, .composer input:focus-visible { outline: none; }
+  /* Documents + submit card, shown once the assistant has all six facts. */
+  .docs { align-self: stretch; display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--card); }
+  .docs h2 { margin: 0; font-size: 15px; font-weight: 500; }
+  .docs p { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.4; }
+  .doc { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 12px; cursor: pointer; font-size: 13.5px; }
+  .doc.ok { border-style: solid; border-color: var(--decision-fast-line); }
+  .doc .name { color: var(--muted-foreground); font: 500 11px var(--font-mono); max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+  .doc.ok .name { color: var(--decision-fast); }
+  .doc input { display: none; }
+  .submit { all: unset; box-sizing: border-box; text-align: center; padding: 11px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font: 500 12px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+  .submit:disabled { opacity: .35; cursor: default; }
+  .err { color: var(--destructive, #e5484d); font-size: 13px; }
+  .receipt .ref { font: 500 12px var(--font-mono); color: var(--foreground); word-break: break-all; }
   #claims { overflow-y: auto; padding: 22px 18px 18px; }
   .eyebrow { font: 500 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
   h1 { font-size: 30px; font-weight: 500; letter-spacing: -.02em; margin: 6px 0 18px; }
@@ -157,12 +170,83 @@ $('ask').addEventListener('submit', async (e) => {
     chat.values = out.values || chat.values;
     chat.log.push({ role: 'assistant', content: out.reply });
     wait.textContent = out.reply; wait.classList.remove('wait');
+    if (out.ready) showDocs();
   } catch (err) {
     wait.textContent = err.message || 'Something went wrong. Please try again.'; wait.classList.remove('wait');
   } finally {
     chat.busy = false; $('say').focus();
   }
 });
+// ---- Documents and submission: the same intake API as the full claim form (/api/intakes/submit).
+const DOCS = [
+  { kind: 'incident_report', label: 'Incident report', required: true },
+  { kind: 'itemized_quote', label: 'Itemized repair quote', required: true },
+  { kind: 'damage_photo', label: 'Damage photo (optional)', required: false },
+];
+const MAX_BYTES = 2 * 1024 * 1024;
+const files = {};
+let docsCard = null, submitted = false;
+function hex(bytes) { return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(''); }
+function toBase64(file) {
+  return new Promise((ok, fail) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(',')[1] || '');
+    r.onerror = () => fail(new Error('The file could not be read.'));
+    r.readAsDataURL(file);
+  });
+}
+function showDocs() {
+  if (docsCard || submitted) return;
+  docsCard = node('div', 'docs');
+  const err = node('p', 'err'); err.hidden = true;
+  const btn = node('button', 'submit', 'Submit claim'); btn.type = 'button'; btn.disabled = true;
+  const ready = () => { btn.disabled = !DOCS.every((d) => !d.required || files[d.kind]); };
+  docsCard.append(node('h2', '', 'Add your documents'),
+    node('p', '', 'We need the incident report and an itemized repair quote. PDF, PNG or JPEG, up to 2 MB each.'));
+  for (const d of DOCS) {
+    const row = node('label', 'doc'); const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg';
+    const name = node('span', 'name', 'Choose file');
+    row.append(node('span', '', d.label), name, input);
+    input.addEventListener('change', async () => {
+      const f = input.files && input.files[0]; err.hidden = true;
+      if (!f) return;
+      if (f.size > MAX_BYTES) { err.textContent = f.name + ' is larger than 2 MB.'; err.hidden = false; return; }
+      try {
+        files[d.kind] = { kind: d.kind, name: f.name.replace(/[\/\x00-\x1f]/g, '_'), content_base64: await toBase64(f) };
+        name.textContent = f.name; row.classList.add('ok'); ready();
+      } catch (e) { err.textContent = e.message; err.hidden = false; }
+    });
+    docsCard.append(row);
+  }
+  btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'Submitting…'; err.hidden = true;
+    const payload = { ...chat.values, request_id: crypto.randomUUID(), notes: {},
+      documents: DOCS.map((d) => files[d.kind]).filter(Boolean) };
+    try {
+      const r = await fetch(API + '/api/intakes/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: hex(crypto.getRandomValues(new Uint8Array(32))), expected_revision: 0,
+          evidence_version: 1, payload }) });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(out.error || 'The claim could not be submitted. Please try again.');
+      submitted = true; showReceipt(out);
+    } catch (e) {
+      err.textContent = e.message; err.hidden = false; btn.textContent = 'Submit claim'; ready();
+    }
+  });
+  docsCard.append(err, btn);
+  $('thread').append(docsCard);
+  $('thread').scrollTop = $('thread').scrollHeight;
+}
+function showReceipt(out) {
+  const card = node('div', 'docs receipt');
+  const next = out.evidence && out.evidence.next_action && out.evidence.next_action.message;
+  card.append(node('h2', '', 'Claim submitted'), node('p', '', 'Your reference'), node('span', 'ref', out.reference || ''),
+    node('p', '', next || 'We have received your claim and documents. The claims team will be in touch by email.'));
+  docsCard.replaceWith(card); docsCard = card;
+  $('say').disabled = true; $('say').placeholder = 'Claim submitted'; $('send').disabled = true;
+  $('thread').scrollTop = $('thread').scrollHeight;
+}
 $('tab-new').addEventListener('click', () => select('new'));
 $('tab-claims').addEventListener('click', () => select('claims'));
 select('new');

@@ -100,6 +100,8 @@ class Handler(BaseHTTPRequestHandler):
     backend = ("127.0.0.1", 8765)
 
     judge_backend = None
+    # Mobile claim reports (/api/intakes/*) go to a local SQLite backend whose staff inbox the reviewer app reads.
+    intake_backend = ("127.0.0.1", 8766)
 
     def local_file(self):
         path = urlsplit(self.path).path
@@ -141,6 +143,8 @@ class Handler(BaseHTTPRequestHandler):
             upstream = self.judge_backend
         if self.judge_backend and self.command == "GET" and target.path == "/examples/quotes/itemized-1300.pdf":
             upstream = self.judge_backend
+        if target.path.startswith("/api/intakes/") and self.intake_backend:
+            upstream = self.intake_backend
         local = self.local_file()
         if local:
             data = local[0].read_bytes()
@@ -175,8 +179,12 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("--port", type=int, default=8090); ap.add_argument("--backend", default="http://127.0.0.1:8765")
     ap.add_argument("--judge-port", type=int, help="port of the separate local judge room")
+    ap.add_argument("--intake-backend", default="http://127.0.0.1:8766",
+                    help="backend that stores new claim reports (SQLite, its staff inbox feeds the reviewer app); 'none' = main backend")
     a = ap.parse_args(); u = urlsplit(a.backend); Handler.backend = (u.hostname, u.port or 80)
     if a.judge_port:
         Handler.judge_backend = ("127.0.0.1", a.judge_port)
+    if a.intake_backend == "none": Handler.intake_backend = None
+    else: iu = urlsplit(a.intake_backend); Handler.intake_backend = (iu.hostname, iu.port or 80)
     print(f"Retakt preview on http://127.0.0.1:{a.port}  ->  backend {a.backend}")
     ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()
