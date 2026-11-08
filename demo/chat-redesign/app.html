@@ -11,7 +11,24 @@
   body { display: flex; flex-direction: column; background: var(--background); color: var(--foreground); font-family: var(--font-sans); }
   .view { flex: 1; min-height: 0; display: none; }
   .view.on { display: block; }
-  #new iframe { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+  /* New claim: title on top, conversation in the middle, input pinned at the bottom centre. */
+  #new.on { display: flex; flex-direction: column; }
+  .report-head { text-align: center; padding: 18px 18px 8px; }
+  .report-head h1 { margin: 6px 0 0; }
+  .thread { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .hint { margin: auto 0; text-align: center; color: var(--muted-foreground); font-size: 14px; line-height: 1.5; padding: 0 12px; }
+  .bubble { max-width: 82%; padding: 10px 13px; border-radius: 16px; font-size: 14.5px; line-height: 1.45; white-space: pre-wrap; }
+  .bubble.ai { align-self: flex-start; background: var(--card); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
+  .bubble.me { align-self: flex-end; background: var(--primary); color: var(--primary-foreground); border-bottom-right-radius: 6px; }
+  .bubble.wait { color: var(--muted-foreground); }
+  .composer { display: flex; justify-content: center; padding: 10px 14px max(14px, env(safe-area-inset-bottom)); }
+  .composer form { display: flex; align-items: center; gap: 6px; width: 100%; max-width: 420px; padding: 5px 5px 5px 16px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); }
+  .composer form:focus-within { border-color: var(--ring); }
+  .composer input { all: unset; flex: 1; min-width: 0; font-size: 15px; color: var(--foreground); padding: 8px 0; }
+  .composer input::placeholder { color: var(--muted-foreground); }
+  .send { all: unset; box-sizing: border-box; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); cursor: pointer; font-size: 17px; }
+  .send:disabled { opacity: .35; cursor: default; }
+  .send:focus-visible, .composer input:focus-visible { outline: none; }
   #claims { overflow-y: auto; padding: 22px 18px 18px; }
   .eyebrow { font: 500 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
   h1 { font-size: 30px; font-weight: 500; letter-spacing: -.02em; margin: 6px 0 18px; }
@@ -28,18 +45,33 @@
   dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 16px 0 0; font-size: 14px; }
   dt { color: var(--muted-foreground); } dd { margin: 0; text-align: right; }
   .note, .empty { color: var(--muted-foreground); font-size: 14px; padding: 18px 0; }
-  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 14px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--background); }
-  .tab { all: unset; box-sizing: border-box; text-align: center; padding: 11px; border-radius: 999px; border: 1px solid var(--border); font: 500 12px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); cursor: pointer; }
+  /* Small segmented switch, centred at the top. */
+  .tabs-wrap { display: flex; justify-content: center; padding: max(12px, env(safe-area-inset-top)) 14px 0; }
+  .tabs { display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); }
+  .tab { all: unset; box-sizing: border-box; text-align: center; padding: 6px 14px; border-radius: 999px; font: 500 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); cursor: pointer; }
   .tab[aria-selected="true"] { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
 </style>
 </head>
 <body>
-<section class="view on" id="new" aria-label="New claim"><iframe id="intake" title="New claim"></iframe></section>
+<div class="tabs-wrap">
+  <nav class="tabs" role="tablist" aria-label="Retakt">
+    <button class="tab" role="tab" id="tab-new" aria-selected="true" type="button">New claim</button>
+    <button class="tab" role="tab" id="tab-claims" aria-selected="false" type="button">My claims</button>
+  </nav>
+</div>
+<section class="view on" id="new" aria-label="New claim">
+  <header class="report-head"><span class="eyebrow">Retakt</span><h1>Report a claim</h1></header>
+  <div class="thread" id="thread" aria-live="polite">
+    <p class="hint" id="hint">Tell us what happened to your vehicle.<br>We take care of the rest.</p>
+  </div>
+  <div class="composer">
+    <form id="ask" autocomplete="off">
+      <input id="say" maxlength="2000" placeholder="What happened?" aria-label="Describe what happened">
+      <button class="send" id="send" type="submit" aria-label="Send" disabled>↑</button>
+    </form>
+  </div>
+</section>
 <section class="view" id="claims" aria-label="My claims"></section>
-<nav class="tabs" role="tablist" aria-label="Retakt">
-  <button class="tab" role="tab" id="tab-new" aria-selected="true" type="button">New claim</button>
-  <button class="tab" role="tab" id="tab-claims" aria-selected="false" type="button">My claims</button>
-</nav>
 <script>
 'use strict';
 const API = new URLSearchParams(location.search).get('api') || '';
@@ -61,14 +93,17 @@ function select(name) {
     $('tab-' + t).setAttribute('aria-selected', String(t === name));
     $(t).classList.toggle('on', t === name);
   }
-  if (name === 'new' && !$('intake').getAttribute('src')) $('intake').setAttribute('src', '/?start=chat');
   if (name === 'claims') showList();
 }
 async function showList() {
   const box = $('claims');
   box.replaceChildren(node('span', 'eyebrow', 'Retakt'), node('h1', '', 'My claims'), node('p', 'empty', 'Loading…'));
   try {
-    const { claims } = await get('/api/claims');
+    const { claims: all } = await get('/api/claims');
+    // A customer has only a few claims: show three, one per status where possible.
+    const MAX_CLAIMS = 3, seen = new Set(), claims = [];
+    for (const c of all) if (claims.length < MAX_CLAIMS && !seen.has(c.effective_recommendation)) { seen.add(c.effective_recommendation); claims.push(c); }
+    for (const c of all) if (claims.length < MAX_CLAIMS && !claims.includes(c)) claims.push(c);
     const list = node('div', 'list');
     for (const c of claims) {
       const b = node('button', 'item'); b.type = 'button';
@@ -96,6 +131,38 @@ async function showDetail(id) {
       node('p', 'sub', d.decision && d.decision.explanation ? d.decision.explanation : ''), dl);
   } catch (e) { box.replaceChildren(back, node('p', 'note', e.message)); }
 }
+// ---- Report a claim: chat with the claims assistant (/api/intake-chat in the preview proxy).
+const chat = { log: [], values: {}, busy: false };
+function bubble(role, text, extra) {
+  $('hint')?.remove();
+  const b = node('div', 'bubble ' + (role === 'user' ? 'me' : 'ai') + (extra ? ' ' + extra : ''), text);
+  $('thread').append(b);
+  $('thread').scrollTop = $('thread').scrollHeight;
+  return b;
+}
+$('say').addEventListener('input', () => { $('send').disabled = chat.busy || !$('say').value.trim(); });
+$('ask').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = $('say').value.trim();
+  if (!text || chat.busy) return;
+  $('say').value = ''; $('send').disabled = true; chat.busy = true;
+  chat.log.push({ role: 'user', content: text });
+  bubble('user', text);
+  const wait = bubble('assistant', '…', 'wait');
+  try {
+    const r = await fetch(API + '/api/intake-chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: chat.log, values: chat.values }) });
+    const out = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(out.error || 'Something went wrong. Please try again.');
+    chat.values = out.values || chat.values;
+    chat.log.push({ role: 'assistant', content: out.reply });
+    wait.textContent = out.reply; wait.classList.remove('wait');
+  } catch (err) {
+    wait.textContent = err.message || 'Something went wrong. Please try again.'; wait.classList.remove('wait');
+  } finally {
+    chat.busy = false; $('say').focus();
+  }
+});
 $('tab-new').addEventListener('click', () => select('new'));
 $('tab-claims').addEventListener('click', () => select('claims'));
 select('new');
