@@ -4,6 +4,12 @@
 
 Retakt helps motor insurers in two places: when a customer reports a claim, and when the insurer changes its rules. A driver reports damage on their phone in under two minutes. The insurer sees every claim decided by its own policy, with the reason. When the policy changes, Retakt replays every open claim and shows which ones need a second look, and why.
 
+## Watch the film
+
+[![Retakt film: Anna reports a claim by calling Rico](demo/video/retakt-film-poster.jpg)](demo/video/retakt-film.mp4)
+
+▶ **[Play the Retakt film](demo/video/retakt-film.mp4)** (MP4, 20 MB)
+
 ## Try it
 
 | What | Link | Who it is for |
