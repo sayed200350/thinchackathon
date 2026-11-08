@@ -6,7 +6,8 @@ das Backend weiter (Standard 127.0.0.1:8765). Die Originale in backend/ bleiben 
 die Seiten sind 1:1 Ersatz (gleiche relative URLs, gleiche Origin, kein CORS noetig).
 Start: python3 demo/chat-redesign/serve.py [--port 8090] [--backend http://127.0.0.1:8765]
 """
-import argparse, http.client, sys
+import argparse, datetime, http.client, json, os, re, sys, urllib.request
+from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -18,6 +19,80 @@ PAGES = {  # Pfad -> Datei im Redesign-Ordner (nur wenn die Datei existiert, son
 }
 STATIC = {"/retakt.css": "text/css; charset=utf-8", "/mobile.html": "text/html; charset=utf-8", "/index.html": "text/html; charset=utf-8"}
 HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade", "content-length", "host"}
+
+ROOT = HERE.parent.parent
+FIELDS = ("description", "incident_date", "location", "policy_number", "email", "injury_status")
+CHAT_SYSTEM = """You are Retakt's claim intake assistant for motor insurance, chatting with a policyholder who reports a new claim.
+Collect exactly these six facts, conversationally, one or two questions at a time, short friendly sentences, in the user's language (default English):
+- description: what happened to the vehicle (at least 10 characters)
+- incident_date: the day it happened, as YYYY-MM-DD, never in the future (today is {today})
+- location: where it happened (street, town or landmark)
+- policy_number: the policy reference from their insurance documents
+- email: a contact email for claim updates
+- injury_status: yes, no or unknown (was anyone injured?)
+Rules: Never invent facts. Fill a field only from what the user actually said; keep already known values unless the user corrects them.
+Resolve relative dates ("yesterday") using today's date. Ask for what is still missing. If an answer is unclear, ask again.
+Once all six are known, summarize them briefly and tell the user the next step is attaching documents (incident report and itemized repair quote are needed; a damage photo is optional). Do not ask for documents in the chat itself.
+Always call the tool update_claim with your reply and every field you know so far (omit unknown fields).
+Known so far: {known}"""
+TOOL = {"name": "update_claim", "description": "Reply to the user and record the facts known so far.",
+        "input_schema": {"type": "object", "required": ["reply"], "properties": {
+            "reply": {"type": "string"},
+            **{k: {"type": "string"} for k in FIELDS}}}}
+
+def dotenv():
+    env = {}
+    try:
+        for line in (ROOT / ".env").read_text().splitlines():
+            m = re.match(r"\s*([A-Z_]+)\s*=\s*(.*?)\s*$", line)
+            if m: env[m[1]] = m[2].strip("'\"")
+    except OSError:
+        pass
+    return {**env, **{k: v for k, v in os.environ.items() if k.startswith("AI_")}}
+
+def clean_values(raw, today):
+    out = {}
+    for k in FIELDS:
+        v = raw.get(k)
+        if not isinstance(v, str): continue
+        v = v.strip()
+        ok = {"description": 10 <= len(v) <= 2000, "location": 1 <= len(v) <= 160, "policy_number": 1 <= len(v) <= 80,
+              "email": bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", v)) and len(v) <= 254,
+              "injury_status": v in ("yes", "no", "unknown"),
+              "incident_date": bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", v)) and v <= today}[k]
+        if k == "incident_date" and ok:
+            try: datetime.date.fromisoformat(v)
+            except ValueError: ok = False
+        if ok: out[k] = v
+    return out
+
+def intake_chat(payload):
+    env = dotenv(); key = env.get("AI_API_KEY")
+    if env.get("AI_PROVIDER") != "anthropic" or not key:
+        return 503, {"error": "The AI assistant is not configured (AI_PROVIDER=anthropic and AI_API_KEY in .env)."}
+    msgs = [{"role": m["role"], "content": m["content"].strip()[:2000]} for m in (payload.get("messages") or [])[-30:]
+            if isinstance(m, dict) and m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str) and m["content"].strip()]
+    if not msgs or msgs[-1]["role"] != "user":
+        return 400, {"error": "Send a message first."}
+    today = datetime.datetime.now(ZoneInfo("Europe/Berlin")).date().isoformat()
+    known = clean_values(payload.get("values") or {}, today)
+    body = {"model": env.get("AI_MODEL") or "claude-opus-5-5", "max_tokens": 600,
+            "system": CHAT_SYSTEM.format(today=today, known=json.dumps(known) if known else "nothing yet"),
+            "messages": msgs, "tools": [TOOL]}
+    base = (env.get("AI_BASE_URL") or "https://api.anthropic.com/v1").rstrip("/")
+    req = urllib.request.Request(base + "/messages", json.dumps(body).encode(), {
+        "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01"})
+    try:
+        with urllib.request.urlopen(req, timeout=40) as r: data = json.load(r)
+    except Exception as e:
+        sys.stderr.write("intake-chat AI error: %s\n" % type(e).__name__)
+        return 502, {"error": "The AI assistant is not reachable right now."}
+    call = next((b.get("input") for b in data.get("content", []) if b.get("type") == "tool_use"), None) or {}
+    values = {**known, **clean_values(call, today)}
+    text = " ".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text").strip()
+    if not call.get("reply") and text: call = {**call, "reply": text}
+    reply = call.get("reply") if isinstance(call.get("reply"), str) and call["reply"].strip() else "Could you say that again?"
+    return 200, {"reply": reply.strip(), "values": values, "ready": all(k in values for k in FIELDS)}
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -43,6 +118,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Location", "/judge/chat")
             self.send_header("Content-Length", "0")
             self.end_headers()
+            return
+        if self.command == "POST" and target.path == "/api/intake-chat":
+            length = int(self.headers.get("Content-Length") or 0)
+            try: payload = json.loads(self.rfile.read(min(length, 100000)) or b"{}")
+            except ValueError: payload = {}
+            status, out = intake_chat(payload if isinstance(payload, dict) else {})
+            data = json.dumps(out).encode()
+            self.send_response(status); self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data))); self.send_header("Cache-Control", "no-store")
+            self.end_headers(); self.wfile.write(data)
             return
         upstream = self.backend
         if target.path.startswith("/judge/") and target.path != "/judge/chat":

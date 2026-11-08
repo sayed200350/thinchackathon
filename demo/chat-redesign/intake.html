@@ -50,6 +50,13 @@
     .stage.done .dot { background: var(--decision-fast); border-color: var(--decision-fast); }
 
     .chat { min-width: 0; }
+    .aichat .thread { display: grid; gap: 10px; margin-bottom: 14px; }
+    .bubble { max-width: 88%; padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.45; white-space: pre-wrap; border: 1px solid var(--border); }
+    .bubble.ai { justify-self: start; background: var(--card); border-bottom-left-radius: 4px; }
+    .bubble.me { justify-self: end; background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); border-bottom-right-radius: 4px; }
+    .bubble.typing { opacity: .6; }
+    .composer { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+    .composer textarea { resize: none; font: inherit; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); color: inherit; }
     .log { display: grid; gap: 12px; }
     .log:not(:empty) { margin-bottom: 14px; }
     .previous { border: 1px solid var(--border); border-radius: 12px; padding: 4px 14px; background: var(--card); }
@@ -312,6 +319,10 @@
       const welcomeStep = -1;
       const importStep = -2;
       const receiptStep = -3;
+      const chatStep = -4;
+      const chatMode = new URLSearchParams(location.search).get('start') === 'chat'
+        && location.pathname !== '/judge/chat';
+      const startStep = chatMode ? chatStep : welcomeStep;
       const requiredKinds = ['incident_report', 'itemized_quote'];
       const maxFiles = 4;
       const maxImageBytes = 12 * 1024 * 1024;
@@ -321,7 +332,7 @@
       const current = document.querySelector('#current');
       const stages = document.querySelector('#stages');
       let demoCase = null;
-      let step = welcomeStep;
+      let step = startStep;
       let editing = false;
       let values = {};
       let sources = {};
@@ -806,7 +817,7 @@
         fileButton(controls, 'Replace file', 'replace-start-file', intakeFormats, (list) => openFile(list[0]));
         controls.append(button('Cancel', 'quiet', () => {
           importFile = importResult = null;
-          setStep(welcomeStep);
+          setStep(startStep);
         }));
         form.append(controls);
         form.addEventListener('submit', event => {
@@ -925,7 +936,7 @@
           use,
           button('Choose another start', 'quiet', () => {
             importResult = importFile = null;
-            setStep(welcomeStep);
+            setStep(startStep);
           })
         );
         form.append(actions);
@@ -1103,6 +1114,59 @@
           useLiteral();
         });
         return true;
+      }
+
+
+      /* KI-Chat zur Schadenaufnahme: sammelt die sechs Pflichtangaben im Gespraech, danach Dokumente, Pruefung, Einreichung */
+      let chatLog = [];
+      let chatBusy = false;
+      function drawChat(card) {
+        card.classList.add('aichat');
+        if (!chatLog.length)
+          chatLog.push({ role: 'assistant', content: 'Hi, I\u2019m the Retakt claims assistant. Tell me what happened to your vehicle and I\u2019ll take care of the rest.' });
+        const thread = el('div', 'thread');
+        thread.setAttribute('aria-live', 'polite');
+        for (const m of chatLog) thread.append(el('div', 'bubble ' + (m.role === 'user' ? 'me' : 'ai'), m.content));
+        if (chatBusy) thread.append(el('div', 'bubble ai typing', '\u2026'));
+        card.append(thread);
+        const ready = fields.every((f) => values[f.key]);
+        if (ready) {
+          card.append(button('Continue: add documents', 'primary', () => setStep(docsStep)));
+        } else {
+          const form = el('form', 'composer');
+          const input = el('textarea');
+          input.rows = 2;
+          input.maxLength = 2000;
+          input.placeholder = 'Describe what happened\u2026';
+          input.setAttribute('aria-label', 'Your message');
+          const send = el('button', 'btn primary', 'Send');
+          send.type = 'submit';
+          form.append(input, send);
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+          });
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = input.value.trim();
+            if (!text || chatBusy) return;
+            chatLog.push({ role: 'user', content: text });
+            chatBusy = true;
+            render(false);
+            try {
+              const out = await api('intake-chat', { messages: chatLog, values }, '/api/');
+              Object.assign(values, out.values || {});
+              chatLog.push({ role: 'assistant', content: out.reply });
+            } catch (err) {
+              chatLog.push({ role: 'assistant', content: (err && err.message) || 'Something went wrong. Please try again.' });
+            }
+            chatBusy = false;
+            render(false);
+          });
+          card.append(form);
+          if (chatLog.length > 1) card.append(button('Fill in the form instead', 'quiet', () => setStep(nextUnanswered())));
+          if (!chatBusy) setTimeout(() => input.focus({ preventScroll: true }), 0);
+        }
+        card.querySelector('.thread').lastElementChild?.scrollIntoView({ block: 'nearest' });
       }
 
       function drawQuestion(card) {
@@ -1863,7 +1927,7 @@
         files = [];
         receipt = pending = importFile = importResult = null;
         conflict = false;
-        setStep(welcomeStep);
+        setStep(startStep);
       }
 
       async function resume() {
@@ -1957,6 +2021,7 @@
           if (conflict)
             card.append(button('Open latest saved version', 'primary', resume));
         } else if (receipt) drawReceipt(card);
+        else if (step === chatStep) drawChat(card);
         else if (step === welcomeStep) drawWelcome(card);
         else if (step === importStep && importResult?.image) drawImageImport(card);
         else if (step === importStep) drawImport(card);

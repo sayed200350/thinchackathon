@@ -61,7 +61,7 @@ function select(name) {
     $('tab-' + t).setAttribute('aria-selected', String(t === name));
     $(t).classList.toggle('on', t === name);
   }
-  if (name === 'new' && !$('intake').getAttribute('src')) $('intake').setAttribute('src', '/');
+  if (name === 'new' && !$('intake').getAttribute('src')) $('intake').setAttribute('src', '/?start=chat');
   if (name === 'claims') showList();
 }
 async function showList() {
