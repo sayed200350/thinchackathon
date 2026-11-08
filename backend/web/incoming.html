@@ -98,6 +98,10 @@
     <button id="back" class="link">← Back to claims queue</button>
     <p class="eyebrow">Submitted claim</p><h1 id="heading" tabindex="-1">Claim detail</h1>
     <div id="detail" class="case-grid"></div>
+    <article id="version-panel" hidden><h2>Policy replay</h2>
+      <button type="button" id="versions">Compare recorded V1 with V2</button>
+      <div id="versions-result" aria-live="polite"></div>
+    </article>
     <details id="proposal" class="proposal" hidden><summary>Simulate a different quote limit</summary>
       <form id="simulate"><label for="limit">Human review for quotes above (€)</label>
         <div class="actions"><input type="number" id="limit" min="1" max="1000000" step="1" value="2000" required><button class="primary">Replay this claim</button></div></form>

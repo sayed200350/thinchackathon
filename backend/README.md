@@ -55,3 +55,11 @@ node --check backend/web/workbench.js
 ```
 
 Node is optional, only for the syntax check. The server binds to loopback and is not an internet-hosted service. Browser visual verification was unavailable in this session; HTTP, engine, persistence and authorization paths are covered by tests.
+
+### Submitted-claim policy replay
+
+In **Incoming claims**, open a receipt reference, then select **Compare recorded V1 with V2**. The server replays the saved evidence revision through the same engine used by the workbench. It checks the original decision and policy fingerprint before returning a preview. Closed claims retain the recorded decision. Reviewer corrections remain visible separately.
+
+The V2 configuration in `engine/configs/policy_v2.json` was compiled from the supplied motor change notice (PDF SHA-256 `57a00c9c2dca66b61b7108740ab848ca13d822b3e77b9a98ad3c3ec98dbde7a6`). It lowers the quote limit to €1,200 and adds the high-voltage EV battery trigger. For a reproducible boundary demo, start the labelled sample claim in the chatbot and attach the sample incident report and `backend/fixtures/quotes/itemized-1300.pdf`.
+
+A hosted insurer app should authenticate staff in its own server and call the fixed HTTPS staff gateway. Start that gateway with `--read-only` and a separate upstream reviewer credential for read-only hosting. Keep the upstream origin and key in server secrets. POST `/api/staff/policy-replay` with `reviewer_key`, `reference`, `expected_revision` and `target_version: "v2"`. A stale revision returns 409. The result includes the recorded and proposed version, route, matched rule, explanation, relevant amended rules, recheck flag and closed-claim retention. Opening an insurer-only link locally uses `/incoming#CLM-…`.

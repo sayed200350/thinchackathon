@@ -19,6 +19,8 @@ function clearCase() {
   byId('heading').textContent = 'Claim detail';
   byId('detail').replaceChildren();
   byId('comparison').replaceChildren();
+  byId('version-panel').hidden = true;
+  byId('versions-result').replaceChildren();
   byId('proposal').hidden = true;
   byId('proposal').open = false;
   byId('case').hidden = true;
@@ -194,6 +196,7 @@ function openClaim(reference) {
     byId('heading').focus();
     if (data.evidence.decision?.raw_evidence && data.evidence.decision.input_fingerprint) {
       byId('simulate').reset();
+      byId('version-panel').hidden = false;
       byId('proposal').hidden = false;
     }
   });
@@ -214,12 +217,32 @@ byId('back').onclick = () => {
   clearCase();
   byId('notice').textContent = '';
   const rowButton = Array.from(byId('rows').querySelectorAll('button')).find(b => b.textContent === reference);
+  history.replaceState(null, '', location.pathname);
+  if (!seen.size) loadPage(false);
   (rowButton || byId('reference')).focus();
 };
 byId('refresh').onclick = () => loadPage(false);
 byId('more').onclick = () => loadPage(true);
 window.addEventListener('pagehide', clearInbox);
-window.addEventListener('pageshow', () => loadPage(false));
+window.addEventListener('pageshow', () => {
+  const reference = location.hash.slice(1);
+  if (/^CLM-[0-9a-f-]{36}$/i.test(reference)) openClaim(reference);
+  else loadPage(false);
+});
+byId('versions').onclick = () => {
+  const box = byId('versions-result');
+  box.replaceChildren();
+  request('policy-replay', {reference: selected.reference, expected_revision: selected.category.revision,
+    target_version: 'v2'}, result => {
+    for (const [title, item] of [['Recorded', result.recorded], [result.closed_retained ? 'Retained' : 'Preview', result.proposed]]) {
+      box.append(element('h3', title + ' · ' + item.version), routeBadge(item.recommendation),
+        element('p', item.why), element('code', item.rule));
+    }
+    if (result.impacted_rules.length) box.append(element('p', 'Affected rules · ' + result.impacted_rules.join(', ')));
+    box.append(element('p', result.closed_retained ? 'Closed claim · historical decision retained.'
+      : result.needs_recheck ? 'Open claim · needs recheck.' : 'No recheck needed.'));
+  });
+};
 byId('limit').oninput = () => byId('comparison').replaceChildren();
 byId('simulate').onsubmit = event => {
   event.preventDefault();

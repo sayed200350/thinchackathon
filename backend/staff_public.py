@@ -10,7 +10,7 @@ from .intake import EVIDENCE_FILE_REQUEST_LIMIT
 
 
 ROUTES = frozenset({
-    '/api/staff/inbox', '/api/staff/corrections', '/api/evidence/reviewer', '/api/evidence/document',
+    '/api/staff/inbox', '/api/staff/policy-replay', '/api/staff/corrections', '/api/evidence/reviewer', '/api/evidence/document',
 })
 REQUEST_LIMIT = 64 * 1024
 SUMMARY_LIMIT = 2 * 1024 * 1024
@@ -21,11 +21,11 @@ class StaffHandler(GarageHandler):
     """Use the gateway's nonlogging JSON responses and exact-path dispatch."""
 
     def do_GET(self):
-        self.error_reply(405 if self.requestline.split()[1] in ROUTES else 404)
+        self.error_reply(405 if self.requestline.split()[1] in self.server.staff_routes else 404)
 
     def do_POST(self):
         path = self.requestline.split()[1]
-        if path not in ROUTES:
+        if path not in self.server.staff_routes:
             return self.error_reply(404)
         if self.headers.get('Origin') is not None or self.headers.get('Sec-Fetch-Site') is not None:
             return self.error_reply(403)
@@ -80,9 +80,10 @@ class StaffHandler(GarageHandler):
             upstream.close()
 
 
-def create_server(port, upstream):
+def create_server(port, upstream, *, read_only=False):
     # Reuse loopback validation, bounded connections and connection deadlines.
     server = create_bounded_server('127.0.0.1', port, upstream, max_workers=4)
+    server.staff_routes = ROUTES - {'/api/staff/corrections'} if read_only else ROUTES
     server.RequestHandlerClass = StaffHandler
     return server
 
@@ -91,9 +92,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8774)
     parser.add_argument('--upstream', default='http://127.0.0.1:8766')
+    parser.add_argument('--read-only', action='store_true', help='expose only insurer reads and policy previews')
     args = parser.parse_args()
     try:
-        with create_server(args.port, args.upstream) as server:
+        with create_server(args.port, args.upstream, read_only=args.read_only) as server:
             print(f'Staff gateway listening on 127.0.0.1:{server.server_port}', flush=True)
             server.serve_forever()
     except KeyboardInterrupt:

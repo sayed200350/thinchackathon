@@ -18,6 +18,7 @@ from .intake_pdf import extract_pdf
 from .quote_evidence import assess_quote, demo_replay, QUOTE_EXAMPLES
 from .evidence_cases import claimant_action
 from .staff import staff_action, staff_correction
+from .intake_replay import replay_versions
 from . import evidence_storage
 from .evidence_setup import credential
 from .store import RequestError, connect, initialize
@@ -131,11 +132,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def dispatch_request(self):
         parts = [unquote(p) for p in urlsplit(self.path).path.strip("/").split("/")]
-        if self.command == "POST" and parts in (["api", "staff", "inbox"], ["api", "staff", "corrections"]):
+        if self.command == "POST" and parts in (["api", "staff", "inbox"], ["api", "staff", "corrections"], ["api", "staff", "policy-replay"]):
             body = self.read_json()
             with self.server.open_store() as store:
                 if parts[-1] == "corrections":
                     return staff_correction(store, body, self.server.staff_key)
+                if parts[-1] == "policy-replay":
+                    detail = staff_action(store, "reviewer", body, self.server.staff_key)
+                    return 200, replay_versions(detail, body)
                 return 200, staff_action(store, "inbox", body, self.server.staff_key)
         if self.command == "POST" and parts == ["api", "intakes", "garage-link"]:
             return self.garage_request("garage-link")

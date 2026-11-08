@@ -102,6 +102,14 @@ class InsurerQueueUITests(unittest.TestCase):
         for text in ('Human review', '€1,800', decision['primary_rule_id'], decision['policy_version'],
                      decision['audit']['detail']['employee']['why']):
             expect(panel).to_contain_text(text)
+        access, _, _ = call(self.intake, 'POST', '/api/staff/policy-replay', {'reference': reference})
+        self.assertEqual(access, 403)
+        args = {'reference': reference, 'expected_revision': saved['category']['revision'], 'target_version': 'v2'}
+        status, replay, _ = call(self.intake, 'POST', '/api/staff/policy-replay', dict(args, reviewer_key=self.key))
+        self.assertEqual(status, 200)
+        page.get_by_role('button', name='Compare recorded V1 with V2').click()
+        for item in (replay['recorded'], replay['proposed']):
+            expect(page.locator('#versions-result')).to_contain_text(item['why'])
         page.get_by_text('Simulate a different quote limit', exact=True).click()
         page.get_by_role('button', name='Replay this claim').click()
         expect(page.locator('#comparison')).to_contain_text('HR_QUOTE_LIMIT')
