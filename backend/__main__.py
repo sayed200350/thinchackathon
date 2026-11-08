@@ -30,7 +30,10 @@ DEFAULT_SOURCES = [ROOT / "data/taktile" / name for name in
                    ("labelled_development_cases.csv", "unlabelled_practice_cases.csv")]
 SERVER_SETTINGS = {"JEV_API_KEY", "JEV_MODEL", "OPENAI_API_KEY", "OPENAI_MODEL",
                    "SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY", "CLAIM_REVIEWER_KEY", "CLAIM_EVIDENCE_SERVICE_KEY",
-                   "GARAGE_PUBLIC_ORIGIN", "CLAIM_GARAGE_KEY", "Vonage_API_Key"} | VOICE_SETTINGS
+                   "GARAGE_PUBLIC_ORIGIN", "CLAIM_GARAGE_KEY", "Vonage_API_Key",
+                   # Policy apply (backend/policy_apply.py): server-side only, never sent to the browser.
+                   "SUPABASE_SERVICE_ROLE_KEY", "AI_PROVIDER", "AI_API_KEY", "AI_BASE_URL", "AI_MODEL",
+                   "AI_TIMEOUT_SECONDS"} | VOICE_SETTINGS
 INTAKE_REQUEST_LIMIT = 9 * 1024 * 1024  # Three 2 MiB files after base64 encoding, plus form fields.
 
 
@@ -153,6 +156,12 @@ class Handler(BaseHTTPRequestHandler):
                 raise RequestError(404, "Phone intake is disabled.")
             return 200, voice.receive(self.read_json_bytes(2 * 1024 * 1024),
                                       self.headers.get("ElevenLabs-Signature"))
+        if self.command == "POST" and len(parts) == 4 and parts[:2] == ["api", "policies"] and parts[3] == "apply":
+            from .policy_apply import Rejected, ServiceClient, apply_policy
+            try:
+                return 200, apply_policy(ServiceClient.from_env(), parts[2])
+            except Rejected as rejected:
+                return 422, rejected.payload
         if self.command == "GET" and parts in ([""], ["chat"]):
             return 200, self.server.intake_page
         if self.command == "GET" and parts == ["reviewer"]:
