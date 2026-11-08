@@ -158,10 +158,54 @@ class GeminiInterpreter(CompatibleInterpreter):
         return "".join(part["text"] for part in candidate["content"]["parts"] if "text" in part and not part.get("thought"))
 
 
+ANTHROPIC_VERSION = "2026-10-21"
+
+
+def anthropic_schema(schema):
+    """Same schema, with JSON type lists ("string" or null) spelled as anyOf for Claude's structured outputs."""
+    if isinstance(schema, dict):
+        out = {key: anthropic_schema(value) for key, value in schema.items()}
+        if isinstance(out.get("type"), list):
+            out["anyOf"] = [{"type": kind} for kind in out.pop("type")]
+        return out
+    if isinstance(schema, list):
+        return [anthropic_schema(value) for value in schema]
+    return schema
+
+
+class AnthropicInterpreter(CompatibleInterpreter):
+    """Anthropic Messages API with structured output (output_config.format)."""
+    def __init__(self):
+        super().__init__()
+        # Claude thinks before answering; a policy comparison needs more than the generic 30 s cap.
+        self.timeout = max(self.timeout, 90)
+
+    def request_spec(self, content):
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", self.model):
+            raise AIUnavailable("AI_MODEL must be a Claude model identifier, not a URL or path.")
+        payload = dict(model=self.model, max_tokens=16000, system=SYSTEM,
+                       messages=[dict(role="user", content=content)],
+                       output_config=dict(effort="high", format=dict(type="json_schema", schema=anthropic_schema(SCHEMA))),
+                       fallbacks="default")
+        headers = {"x-api-key": self.key, "anthropic-version": ANTHROPIC_VERSION,
+                   "anthropic-beta": "server-side-fallback-2026-07-01"}
+        return self.base + "/messages", headers, payload
+
+    def extract(self, value):
+        if value.get("stop_reason") != "end_turn":
+            raise AIUnavailable("Claude declined or did not finish the interpretation; no policy was activated.")
+        texts = [block["text"] for block in value["content"] if block.get("type") == "text"]
+        if len(texts) != 1:
+            raise ValueError("Claude returned no single structured text block.")
+        return texts[0]
+
+
 def configured_interpreter():
     provider = os.environ.get("AI_PROVIDER", "disabled")
     if provider == "openai_compatible":
         return CompatibleInterpreter()
     if provider == "gemini":
         return GeminiInterpreter()
-    raise AIUnavailable("AI is disabled or unsupported. Set AI_PROVIDER=gemini or openai_compatible with explicit provider settings.")
+    if provider == "anthropic":
+        return AnthropicInterpreter()
+    raise AIUnavailable("AI is disabled or unsupported. Set AI_PROVIDER=gemini, anthropic or openai_compatible with explicit provider settings.")

@@ -3,6 +3,8 @@
 GET  /api/settings/ai -> provider, model and a masked key; the key itself never leaves the server.
 POST /api/settings/ai {"api_key": "..."} -> verified with the provider, applied at once (both the
 policy interpreter and the chat read AI_API_KEY per request) and written to the server's .env.
+The provider follows the key: an Anthropic key (sk-ant-...) switches to Claude, a Google key
+(AIza... / AQ....) to Gemini, together with that provider's API root and default model.
 The server only listens on 127.0.0.1 and JSON POSTs need the CORS preflight that only the
 configured UI origin passes, so other websites cannot change the key.
 """
@@ -17,6 +19,22 @@ from urllib.request import Request
 from .store import RequestError
 
 KEY_PATTERN = re.compile(r"[A-Za-z0-9._\-]{20,200}")
+
+
+# Provider defaults applied when a key of another provider is saved.
+PROVIDERS = {
+    "anthropic": {"AI_BASE_URL": "https://api.anthropic.com/v1", "AI_MODEL": "claude-opus-5-5"},
+    "gemini": {"AI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta", "AI_MODEL": "gemini-3.5-flash"},
+}
+
+
+def provider_for(key):
+    """Provider implied by the key format, or None to keep the configured one."""
+    if key.startswith("sk-ant-"):
+        return "anthropic"
+    if key.startswith(("AIza", "AQ.")):
+        return "gemini"
+    return None
 
 
 def masked(key):
@@ -37,18 +55,33 @@ def _open(request, timeout):
     return build_opener(NoRedirect).open(request, timeout=timeout)
 
 
-def verify_key(key, opener=_open):
+def target_settings(key):
+    """AI_PROVIDER/AI_BASE_URL/AI_MODEL to use with this key (unchanged unless the key names another provider)."""
+    current = {name: os.environ.get(name, "").strip() for name in ("AI_PROVIDER", "AI_BASE_URL", "AI_MODEL")}
+    provider = provider_for(key)
+    if provider and provider != current["AI_PROVIDER"]:
+        return {"AI_PROVIDER": provider, **PROVIDERS[provider]}
+    return current
+
+
+def verify_key(key, opener=_open, settings=None):
     """Ask the provider whether the key is accepted. Listing models costs no generation quota.
 
     Returns a warning string (key accepted with a caveat) or None; raises RequestError if refused.
     """
-    provider = os.environ.get("AI_PROVIDER", "").strip()
-    base = os.environ.get("AI_BASE_URL", "").strip().rstrip("/")
-    if provider not in ("gemini", "openai_compatible"):
+    settings = settings or target_settings(key)
+    provider = settings["AI_PROVIDER"]
+    base = settings["AI_BASE_URL"].rstrip("/")
+    if provider not in ("gemini", "anthropic", "openai_compatible"):
         raise RequestError(409, "AI is disabled on this server. Set AI_PROVIDER in .env first.")
     if urlsplit(base).scheme != "https":
         raise RequestError(409, "AI_BASE_URL must be an https URL before a key can be checked.")
-    headers = {"x-goog-api-key": key} if provider == "gemini" else {"Authorization": f"Bearer {key}"}
+    if provider == "gemini":
+        headers = {"x-goog-api-key": key}
+    elif provider == "anthropic":
+        headers = {"x-api-key": key, "anthropic-version": "2026-10-21"}
+    else:
+        headers = {"Authorization": f"Bearer {key}"}
     try:
         with opener(Request(base + "/models", headers=headers), 15) as response:
             response.read(1)
@@ -94,9 +127,14 @@ def update_ai_key(body, env_path, opener=_open):
     key = body["api_key"].strip()
     if not KEY_PATTERN.fullmatch(key):
         raise RequestError(400, "That does not look like an API key (20-200 letters, digits, . _ -).")
-    warning = verify_key(key, opener)
+    settings = target_settings(key)
+    warning = verify_key(key, opener, settings)
+    changed = {name: value for name, value in settings.items() if os.environ.get(name, "").strip() != value}
     if env_path:
+        for name, value in changed.items():
+            write_env(env_path, name, value)
         write_env(env_path, "AI_API_KEY", key)
+    os.environ.update(changed)
     os.environ["AI_API_KEY"] = key  # live for the next policy apply and chat request
     return dict(ai_settings(), saved=True, persisted=bool(env_path), warning=warning)
 

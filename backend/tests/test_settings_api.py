@@ -87,11 +87,42 @@ class SettingsApiTest(unittest.TestCase):
         self.assertEqual(self.env.read_text(encoding="utf-8"),
                          f"SUPABASE_URL=https://x.supabase.co\nAI_API_KEY={GOOD}\n")
 
-    def test_disabled_provider_is_refused(self):
+    def test_disabled_provider_is_refused_for_a_key_of_unknown_format(self):
         with mock.patch.dict(os.environ, {"AI_PROVIDER": "disabled"}):
             with self.assertRaises(RequestError) as caught:
-                settings_api.update_ai_key({"api_key": GOOD}, self.env, provider(200)[0])
+                settings_api.update_ai_key({"api_key": "plain-key-0123456789abcdef"}, self.env, provider(200)[0])
         self.assertEqual(caught.exception.status, 409)
+
+    def test_anthropic_key_switches_provider_base_and_model(self):
+        key = "sk-ant-api03-" + "A1b2_C3d4-" * 8
+        opener, calls = provider(200)
+        result = settings_api.update_ai_key({"api_key": key}, self.env, opener)
+        self.assertEqual(calls[0].full_url, "https://api.anthropic.com/v1/models")
+        self.assertEqual(calls[0].get_header("X-api-key"), key)
+        self.assertEqual(calls[0].get_header("Anthropic-version"), "2026-10-21")
+        self.assertIsNone(calls[0].get_header("X-goog-api-key"))
+        self.assertEqual((result["provider"], result["model"]), ("anthropic", "claude-opus-5-5"))
+        self.assertEqual(os.environ["AI_BASE_URL"], "https://api.anthropic.com/v1")
+        text = self.env.read_text(encoding="utf-8")
+        for line in ("AI_PROVIDER=anthropic", "AI_BASE_URL=https://api.anthropic.com/v1",
+                     "AI_MODEL=claude-opus-5-5", f"AI_API_KEY={key}", "SUPABASE_URL=https://x.supabase.co"):
+            self.assertIn(line, text.splitlines())
+        self.assertNotIn("gemini", text)
+
+    def test_rejected_anthropic_key_keeps_gemini_settings(self):
+        key = "sk-ant-api03-" + "x" * 40
+        with self.assertRaises(RequestError):
+            settings_api.update_ai_key({"api_key": key}, self.env, provider(401)[0])
+        self.assertEqual(os.environ["AI_PROVIDER"], "gemini")
+        self.assertEqual(os.environ["AI_MODEL"], "gemini-3.5-flash")
+
+    def test_google_key_switches_back_from_anthropic(self):
+        with mock.patch.dict(os.environ, {"AI_PROVIDER": "anthropic", "AI_MODEL": "claude-opus-5-5",
+                                          "AI_BASE_URL": "https://api.anthropic.com/v1"}):
+            opener, calls = provider(200)
+            result = settings_api.update_ai_key({"api_key": GOOD}, self.env, opener)
+            self.assertEqual((result["provider"], result["model"]), ("gemini", "gemini-3.5-flash"))
+            self.assertEqual(calls[0].full_url, ENV["AI_BASE_URL"] + "/models")
 
 
 if __name__ == "__main__":

@@ -158,7 +158,7 @@ In Supabase mode the chat, correction form and claim detail all read the shared 
 
 `GET /api/settings/ai` returns `provider`, `model`, `base_url`, `key_set` and `key_hint` (last four characters). The key itself never leaves the server.
 
-`POST /api/settings/ai` with `{"api_key":"..."}` checks the key with the provider (`GET {AI_BASE_URL}/models`, no generation quota). If accepted, the key applies at once to policy apply and the reviewer chat and is written to the server's `.env` as `AI_API_KEY` (other lines unchanged, mode 600). A rejected key returns 422, an unreachable provider returns 502 and nothing changes. HTTP 429 from the provider means the key is valid with no quota left: it is saved and `warning` says so.
+`POST /api/settings/ai` with `{"api_key":"..."}` checks the key with the provider (`GET {AI_BASE_URL}/models`, no generation quota). If accepted, the key applies at once to policy apply and the reviewer chat and is written to the server's `.env` as `AI_API_KEY` (other lines unchanged, mode 600). The provider follows the key format: `sk-ant-...` switches to `anthropic` (`https://api.anthropic.com/v1`, `claude-opus-5-5`), `AIza...`/`AQ....` to `gemini` (`https://generativelanguage.googleapis.com/v1beta`, `gemini-3.5-flash`); `AI_PROVIDER`, `AI_BASE_URL` and `AI_MODEL` are then updated live and in `.env` too. Any other key keeps the configured provider. A rejected key returns 422, an unreachable provider returns 502 and nothing changes. HTTP 429 from the provider means the key is valid with no quota left: it is saved and `warning` says so.
 
 ```sh
 curl -sS http://127.0.0.1:8765/api/settings/ai

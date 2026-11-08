@@ -25,6 +25,38 @@ def gemini_reply(value):
     return {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": json.dumps(value)}]}}]}
 
 
+CLAUDE_ENV = {"AI_PROVIDER": "anthropic", "AI_API_KEY": "k", "AI_MODEL": "claude-opus-5-5",
+              "AI_BASE_URL": "https://api.anthropic.com/v1"}
+
+
+def claude_reply(value, stop="end_turn"):
+    return {"stop_reason": stop, "content": [{"type": "thinking", "thinking": ""},
+                                              {"type": "text", "text": json.dumps(value)}]}
+
+
+class ClaudeTests(unittest.TestCase):
+    def test_intent_and_answer_use_claude_with_the_ai_key(self):
+        with patch.dict(os.environ, CLAUDE_ENV, clear=True), \
+                patch.object(providers, "_post", return_value=claude_reply({"intent": "what_if"})) as post:
+            self.assertEqual(providers.classify_intent("What about 1501?", HISTORY, INTENTS), "what_if")
+            self.assertEqual(providers.provider_name("intent"), "Claude")
+        host, path, key, payload, _timeout = post.call_args.args
+        self.assertEqual((host, path, key), ("api.anthropic.com", "/v1/messages", "k"))
+        self.assertEqual(post.call_args.kwargs, {"auth_header": "x-api-key",
+                                                 "extra_headers": {"anthropic-version": "2026-10-21"}})
+        self.assertEqual(payload["model"], "claude-opus-5-5")
+        self.assertEqual(payload["output_config"]["format"]["type"], "json_schema")
+        with patch.dict(os.environ, CLAUDE_ENV, clear=True), \
+                patch.object(providers, "_post", return_value=claude_reply({"statement_ids": ["rule", "route"]})):
+            self.assertEqual(providers.compose_answer("Why?", HISTORY, FACTS), ["rule", "route"])
+
+    def test_refused_or_invalid_claude_output_falls_back(self):
+        for reply in (claude_reply({"intent": "what_if"}, stop="refusal"), claude_reply({"intent": "approve"}),
+                      claude_reply({"intent": "what_if"}, stop="max_tokens"), {}):
+            with patch.dict(os.environ, CLAUDE_ENV, clear=True), patch.object(providers, "_post", return_value=reply):
+                self.assertIsNone(providers.classify_intent("Why?", [], INTENTS))
+
+
 class GeminiTests(unittest.TestCase):
     def test_intent_and_answer_use_gemini_when_only_ai_settings_exist(self):
         with patch.dict(os.environ, GEMINI_ENV, clear=True), \

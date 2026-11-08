@@ -19,7 +19,8 @@ MAX_RESPONSE_BYTES = 256 * 1024
 JEV_MIN_CONFIDENCE = 0.70
 
 
-def _post(host: str, path: str, key: str, payload: dict, timeout: int, auth_header: Optional[str] = None) -> dict:
+def _post(host: str, path: str, key: str, payload: dict, timeout: int, auth_header: Optional[str] = None,
+          extra_headers: Optional[Mapping[str, str]] = None) -> dict:
     connection = None
     try:
         context = ssl.create_default_context()
@@ -32,7 +33,7 @@ def _post(host: str, path: str, key: str, payload: dict, timeout: int, auth_head
         connection.request(
             "POST", path, body=json.dumps(payload, allow_nan=False).encode("utf-8"),
             headers={**({auth_header: key} if auth_header else {"Authorization": f"Bearer {key}"}),
-                     "Content-Type": "application/json"},
+                     **(extra_headers or {}), "Content-Type": "application/json"},
         )
         response = connection.getresponse()
         if response.status != 200:
@@ -62,8 +63,9 @@ def _context(message: str, history: History) -> dict:
 
 
 def _gemini_json(system: str, context: dict, schema: dict, timeout: int = 10) -> Optional[dict]:
-    """One structured Gemini call using the server's AI_* settings; None when unavailable or invalid."""
-    if os.environ.get("AI_PROVIDER", "").strip() != "gemini":
+    """One structured call (Gemini or Claude) using the server's AI_* settings; None when unavailable or invalid."""
+    provider = os.environ.get("AI_PROVIDER", "").strip()
+    if provider not in ("gemini", "anthropic"):
         return None
     key = os.environ.get("AI_API_KEY", "").strip()
     base = urlsplit(os.environ.get("AI_BASE_URL", "").strip().rstrip("/"))
@@ -71,6 +73,8 @@ def _gemini_json(system: str, context: dict, schema: dict, timeout: int = 10) ->
     if (not key or not model or not re.fullmatch(r"[A-Za-z0-9._-]+", model) or base.scheme != "https"
             or not base.netloc or base.username or base.password or base.query or base.fragment):
         return None
+    if provider == "anthropic":
+        return _claude_json(base, key, model, system, context, schema, max(timeout, 20))
     payload = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": json.dumps(context, ensure_ascii=False)}]}],
@@ -85,6 +89,24 @@ def _gemini_json(system: str, context: dict, schema: dict, timeout: int = 10) ->
         text = "".join(part["text"] for part in candidate["content"]["parts"]
                        if isinstance(part.get("text"), str) and not part.get("thought"))
         value = json.loads(text)
+    except (KeyError, IndexError, TypeError, AttributeError, ValueError, RecursionError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _claude_json(base, key: str, model: str, system: str, context: dict, schema: dict, timeout: int) -> Optional[dict]:
+    payload = {
+        "model": model, "max_tokens": 4000, "system": system,
+        "messages": [{"role": "user", "content": json.dumps(context, ensure_ascii=False)}],
+        "output_config": {"effort": "low", "format": {"type": "json_schema", "schema": schema}},
+    }
+    reply = _post(base.netloc, f"{base.path}/messages", key, payload, timeout, auth_header="x-api-key",
+                  extra_headers={"anthropic-version": "2026-10-21"})
+    try:
+        if reply.get("stop_reason") != "end_turn":
+            return None
+        texts = [block["text"] for block in reply["content"] if block.get("type") == "text"]
+        value = json.loads(texts[0]) if len(texts) == 1 else None
     except (KeyError, IndexError, TypeError, AttributeError, ValueError, RecursionError):
         return None
     return value if isinstance(value, dict) else None
@@ -222,5 +244,7 @@ def compose_answer(message: str, history: History, statements: Mapping[str, str]
 def provider_name(stage: str) -> str:
     """Label of the service that handles a stage ("intent" or "answer") for the model_usage report."""
     key, label = ("JEV_API_KEY", "Jev") if stage == "intent" else ("OPENAI_API_KEY", "GPT")
-    gemini = os.environ.get("AI_PROVIDER", "").strip() == "gemini" and os.environ.get("AI_API_KEY", "").strip()
-    return "Gemini" if gemini and not os.environ.get(key, "").strip() else label
+    shared = {"gemini": "Gemini", "anthropic": "Claude"}.get(os.environ.get("AI_PROVIDER", "").strip())
+    if shared and os.environ.get("AI_API_KEY", "").strip() and not os.environ.get(key, "").strip():
+        return shared
+    return label
