@@ -8,6 +8,7 @@ import unittest
 from uuid import uuid4
 
 from backend.tests.test_reviewer import call, running_api
+from backend.tests.test_intake import attachment
 
 
 class ClaimIntakeHTTPTests(unittest.TestCase):
@@ -19,7 +20,8 @@ class ClaimIntakeHTTPTests(unittest.TestCase):
             'incident_date': '2025-01-01', 'location': 'Munich', 'policy_number': 'TEST-123',
             'email': 'claimant@example.invalid', 'injury_status': 'no',
             'documents': [{'kind': 'incident_report', 'name': 'incident.pdf',
-                           'content_base64': base64.b64encode(content).decode('ascii')}],
+                           'content_base64': base64.b64encode(content).decode('ascii')},
+                          attachment('quote.pdf', 'itemized_quote')],
         }
         with TemporaryDirectory() as directory:
             db_path = Path(directory) / 'server.sqlite'
@@ -33,8 +35,8 @@ class ClaimIntakeHTTPTests(unittest.TestCase):
                 status, receipt, _ = call(port, 'POST', '/api/intakes', submission)
                 self.assertEqual(status, 200, receipt)
                 self.assertEqual(set(receipt), {'reference', 'document_count', 'missing_documents'})
-                self.assertEqual(receipt['document_count'], 1)
-                self.assertEqual(receipt['missing_documents'], ['itemized_quote'])
+                self.assertEqual(receipt['document_count'], 2)
+                self.assertEqual(receipt['missing_documents'], [])
             with running_api(db_path) as port:
                 self.assertEqual(call(port, 'POST', '/api/intakes', submission)[:2], (200, receipt))
                 self.assertEqual(call(port, 'POST', '/api/intakes', dict(submission, location='Changed'))[0], 409)

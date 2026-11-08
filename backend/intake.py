@@ -99,6 +99,20 @@ def validate_intake(body, *, enhanced=False):
     return normalized
 
 
+def validate_submission(body, *, enhanced=False, report_on_file=False):
+    """Only complete claims can enter the insurer's submitted inbox. Drafts are separate."""
+    normalized = validate_intake(body, enhanced=enhanced)
+    present = {doc['kind'] for doc in normalized['documents']}
+    if report_on_file:
+        present.add('incident_report')
+    missing = [kind for kind in REQUIRED_DOCUMENTS if kind not in present]
+    if missing:
+        labels = {'incident_report': 'incident report', 'itemized_quote': 'itemized repair quote'}
+        raise RequestError(422, 'Before submitting, upload your ' + ' and '.join(labels[k] for k in missing)
+                           + '. You can save a draft and continue later.')
+    return normalized
+
+
 def initialize_intakes(sqlite_path):
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     with closing(connect(sqlite_path)) as db:

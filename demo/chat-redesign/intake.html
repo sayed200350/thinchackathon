@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <meta name="referrer" content="no-referrer">
-  <title>Report a motor claim · Retakt</title>
+  <title>Report a claim · Retakt</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -206,6 +206,23 @@
     }
       /* Beschreibungstext unter der Ueberschrift ausgeblendet (Skript schreibt im Demo-Modus weiter hinein) */
     .side .sub { display: none; }
+    body.embedded { min-height: 100dvh; background-image: none; }
+    .embedded .topbar, .embedded .side h1, .embedded .side .sub { display: none; }
+    .embedded .layout { padding: 8px 14px 90px; }
+    .embedded .side { margin-bottom: 14px; }
+    .embedded .stages { margin-top: 0; gap: 4px; }
+    .embedded .stage { font-size: 10px; padding: 5px 7px; gap: 5px; }
+    .embedded .card { padding: 14px; scroll-margin: 10px; }
+    .embedded .card h2 { font-size: 24px; }
+    .embedded .aichat { background: transparent; border: 0; padding: 2px; box-shadow: none; }
+    .embedded .aichat .thread { min-height: 70px; }
+    .captured-facts { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 8px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; }
+    .captured-facts dt { color: var(--muted); }
+    .captured-facts dd { margin: 0; overflow-wrap: anywhere; }
+    .conversation-history { margin: 8px 0 14px; color: var(--muted); font-size: 12px; }
+    .conversation-history .bubble { margin: 8px 0; font-size: 13px; }
+    .embedded .composer textarea { min-height: 60px; }
+    .profile-form{display:grid;gap:7px}.profile-form label{margin-top:6px;font-size:12px}.profile-form .btn{margin-top:6px}
   </style>
 </head>
 <body data-voice-agent="">
@@ -214,11 +231,11 @@
       <svg class="logo" viewBox="29.245 29.245 80 80" fill="currentColor" aria-hidden="true"><path d="M29.245 29.245h16.667v80H29.245zM49.245 29.245h8.334v80h-8.334zM62.434 29.245h5.145v80h-5.145zM79.245 29.245h3.333v80h-3.333zM105.912 29.245h3.333v80h-3.333z"/></svg>
       Retakt <span class="eyebrow">Claim intake</span>
     </div>
-    <span class="product">Motor claims</span>
+    <span class="product">Claims</span>
   </header>
   <main class="layout">
     <aside class="side">
-      <h1>Report a motor claim</h1>
+      <h1>Report a claim</h1>
       <p class="sub">
         Start with a photo or report, or tell us what happened.
       </p>
@@ -256,13 +273,14 @@
       <button type="button" id="keep-answer" class="btn quiet" hidden>Use this text as my claim answer</button>
     </dialog>
     <script src="/assets/claim_assistance.js"></script>
+    <script src="/profile.js"></script>
     <script>
       'use strict';
       const fields = [
         {
           key: 'description',
           label: 'What happened',
-          prompt: 'What happened to your vehicle?',
+          prompt: 'What happened?',
           hint: 'Describe the incident and any damage you noticed.',
           type: 'textarea',
           min: 10,
@@ -285,8 +303,8 @@
         },
         {
           key: 'policy_number',
-          label: 'Policy number',
-          prompt: 'What is your policy number?',
+          label: 'Insurance number',
+          prompt: 'What is your insurance number?',
           hint: 'You can find this on your insurance documents.',
           type: 'text',
           max: 80
@@ -320,6 +338,9 @@
       const importStep = -2;
       const receiptStep = -3;
       const chatStep = -4;
+      const profileStep = -5;
+      const inPhone = window.parent !== window && document.body.classList.contains('embedded');
+      const recordedView = inPhone && new URLSearchParams(location.search).get('recorded') === '1';
       const chatMode = new URLSearchParams(location.search).get('start') === 'chat'
         && location.pathname !== '/judge/chat';
       const startStep = chatMode ? chatStep : welcomeStep;
@@ -351,6 +372,157 @@
       let garageRequest = null;
       let issuingGarageLink = false;
       let checkingReceipt = false;
+      let draftTimer = null;
+      let draftSave = null;
+      let savedDraftFingerprint = '';
+      let submittedValues = {};
+      let draftSaveError = '';
+      const profileStore = window.RetaktProfile;
+      let customerContact = {};
+      let profileReviewed = false;
+      let profileReturnStep = startStep;
+
+      function notifyProfileReview() {
+        if (inPhone) window.parent.postMessage({type:'retakt:profile-review-required'},location.origin);
+      }
+
+      function openProfileReview() {
+        if (!inPhone || receipt || pending || conflict || busy || !profileStore?.hasDetails()) return;
+        profileReturnStep=step===profileStep?startStep:step;
+        profileReviewed=false;notifyProfileReview();setStep(profileStep);
+      }
+
+      function drawProfileReview(card) {
+        const saved={...profileStore.read(),...customerContact};
+        if (values.email) saved.email=values.email;
+        if (values.policy_number) saved.insurance_number=values.policy_number;
+        heading(card,'Are your details still current?','Confirm or update these for your new claim.');
+        if (saved.demo) card.append(el('p','file-hint','Fictional demo customer'));
+        const form=el('form','profile-form');
+        for (const [key,label,type,max] of [
+          ['name','Insured person’s name (optional)','text',160],
+          ['email','Contact email','email',254],
+          ['phone','Phone number (optional)','tel',80],
+          ['address','Address (optional)','text',500],
+          ['insurance_number','Insurance number','text',80]
+        ]) {
+          const labelNode=el('label','',label),input=el('input');
+          input.id='profile-'+key;input.name=key;input.type=type;input.maxLength=max;
+          input.value=saved[key] || '';input.required=['email','insurance_number'].includes(key);
+          input.autocomplete={name:'name',email:'email',phone:'tel',address:'street-address'}[key] || 'off';
+          labelNode.htmlFor=input.id;form.append(labelNode,input);
+        }
+        const confirm=el('button','btn primary','Confirm and continue');confirm.type='submit';
+        form.append(el('p','file-hint','We’ll save these details for your next claim on this device.'),confirm);
+        form.addEventListener('submit',event=>{
+          event.preventDefault();if (!form.reportValidity()) return;
+          const next={};for (const key of ['name','email','phone','address','insurance_number']) next[key]=form.elements.namedItem(key).value.trim();
+          next.demo=saved.demo===true && next.email===saved.email && next.insurance_number===saved.insurance_number;
+          try {customerContact=profileStore.save(next);} catch {showError('Your details could not be saved on this device. Please try again.');return;}
+          values.email=next.email;values.policy_number=next.insurance_number;
+          profileReviewed=true;
+          window.parent.postMessage({type:'retakt:profile-confirmed',profile:customerContact},location.origin);
+          setStep(profileReturnStep===profileStep?startStep:profileReturnStep);
+        });
+        card.append(form,button('Use different details for this claim','quiet',()=>{
+          customerContact={name:'',phone:'',address:'',demo:false};profileReviewed=true;
+          window.parent.postMessage({type:'retakt:profile-confirmed',profile:{}},location.origin);
+          delete values.email;delete values.policy_number;setStep(startStep);
+        }));
+      }
+
+      function contactSummary(card, editable) {
+        const rows=[['name','Insured person'],['phone','Phone number'],['address','Address']].filter(([key])=>customerContact[key]);
+        if (rows.length) {const list=el('dl','review');for (const [key,label] of rows) list.append(row(label,customerContact[key]));card.append(list);}
+        if (editable && profileStore?.hasDetails()) card.append(button('Review saved contact details','quiet',openProfileReview));
+      }
+
+      function draftSnapshot() {
+        const previousAnswer = fields[step] ? values[fields[step].key] || partialAnswer : '';
+        captureInput();
+        const draftValues = {...values}, draftSources = {...sources};
+        if (step >= 0 && step < docsStep && fields[step].type !== 'choice') {
+          draftValues[fields[step].key] = partialAnswer;
+          if (partialAnswer !== previousAnswer) delete draftSources[fields[step].key];
+        }
+        return {...(demoCase ? {demo_case:demoCase} : {}), values:draftValues,
+          notes:attachmentNotes(files), documents:files.map(attachmentBody), sources:draftSources,
+          step:step < 0 ? nextUnanswered() : step};
+      }
+
+      function incompleteFields(details) {
+        return fields.filter(field => {
+          const value=details[field.key];
+          if (typeof value !== 'string' || !value.trim() || (field.min && value.trim().length < field.min) || (field.max && value.length > field.max)) return true;
+          if (field.type === 'email') return !/^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(value);
+          if (field.type === 'date') {
+            const parsed=new Date(value+'T00:00:00Z');
+            return !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0,10)!==value || value>today();
+          }
+          return field.type === 'choice' && !Object.hasOwn(injuries,value);
+        }).map(field=>field.key);
+      }
+
+      function recordClaim(draft, data = null, justSubmitted = false) {
+        if (!inPhone || !token) return;
+        const details = data ? submittedValues : draft.values;
+        const documents = data ? data.documents : draft.documents;
+        const missing = requiredKinds.filter(kind => !(kind === 'incident_report' && demoCase === 'DEV-003') && !documents.some(doc=>doc.kind===kind));
+        const missingFields = incompleteFields(details);
+        window.parent.postMessage({type:data?'retakt:claim-receipt':'retakt:claim-record', token,
+          status:data?'submitted':'draft', reference:data?.reference || '', contact:customerContact,
+          title:(details.description || '').slice(0,160), incident_date:details.incident_date || '', values:details,
+          missing_documents:missing, missing_fields:missingFields, ready:!missing.length && !missingFields.length,
+          route:data?.evidence?.category?.effective_recommendation || data?.evidence?.decision?.recommendation || '',
+          just_submitted:justSubmitted},location.origin);
+      }
+
+      function hasIncidentProgress(details=values) {
+        return ['description','incident_date','location','injury_status'].some(key=>details[key]?.trim());
+      }
+
+      function scheduleDraftSave() {
+        clearTimeout(draftTimer);
+        if (!inPhone || step === profileStep || receipt || pending || conflict || (!hasIncidentProgress() && !files.length && !(fields[step] && !['email','policy_number'].includes(fields[step].key) && partialAnswer))) return;
+        draftTimer=setTimeout(()=>saveDraftQuietly(),600);
+      }
+
+      async function saveDraftQuietly() {
+        clearTimeout(draftTimer);
+        if (!inPhone || step === profileStep || receipt || pending || conflict) return !pending && !conflict;
+        if (busy || chatBusy) {scheduleDraftSave();return false;}
+        if (draftSave) {await draftSave;return saveDraftQuietly();}
+        const draft=draftSnapshot();
+        if (!hasIncidentProgress(draft.values) && !draft.documents.length) return true;
+        const fingerprint=JSON.stringify(draft);
+        if (fingerprint===savedDraftFingerprint) {recordClaim(draft);return true;}
+        const savedToken=privateToken();
+        draftSave=(async()=>{
+          try {
+            const data=await api('save-draft',{token:savedToken,expected_revision:revision,evidence_version:1,draft});
+            if (data.status!=='draft' || !Number.isInteger(data.revision)) throw new Error('Could not confirm your saved claim.');
+            if (token!==savedToken) return false;
+            revision=data.revision;savedDraftFingerprint=fingerprint;draftSaveError='';
+            recordClaim(draft);status('Saved in My claims.');
+            return true;
+          } catch (error) {
+            draftSaveError='Your changes could not be saved. Please try Save and continue later.';
+            if (error.status===409) {conflict=true;render(false);}
+            showError(draftSaveError);
+            return false;
+          }
+        })();
+        const ok=await draftSave;draftSave=null;
+        return ok;
+      }
+
+      async function flushRecordedClaim() {
+        // Wait for an attachment, chat answer or explicit save before taking a snapshot.
+        for (let attempt=0; (busy || chatBusy) && attempt<420; attempt++)
+          await new Promise(resolve=>setTimeout(resolve,100));
+        if (busy || chatBusy) return false;
+        return saveDraftQuietly();
+      }
 
       function el(tag, cls, text) {
         const node = document.createElement(tag);
@@ -407,7 +579,7 @@
       }
 
       function privateURL() {
-        const url = new URL(location.pathname === '/judge/chat' ? '/judge/chat' : '/chat', location.origin);
+        const url = inPhone ? new URL(location.href) : new URL(location.pathname === '/judge/chat' ? '/judge/chat' : '/chat', location.origin);
         url.hash = 'claim=' + token;
         return url.href;
       }
@@ -461,6 +633,7 @@
         busy = value;
         current.setAttribute('aria-busy', String(value));
         current.inert = value;
+        if (!value) scheduleDraftSave();
       }
 
       async function api(path, body, base = '/api/intakes/') {
@@ -518,6 +691,7 @@
       }
 
       function drawProgress() {
+        stages.hidden=step===profileStep;
         document.querySelector('.sub').textContent = demoCase
           ? 'Fictional sample claim · ' + demoCase
           : 'Start with a photo or report, or tell us what happened.';
@@ -992,6 +1166,9 @@
 
       function filingReply(question) {
         const text = question.toLowerCase().replace(/[’']/g, '');
+        if (inPhone && /\b(links?|save|pause|resume|draft|finish later|continue later|come back|reopen)\b/.test(text))
+          return 'Your draft is saved in My claims. Open it there to correct details, add documents, and send it when complete.';
+        if (inPhone && receipt) return 'This claim has been sent and is read-only. You can view it in My claims.';
         if (/\b(cover(ed|age)?|eligib\w*|approv\w*|reimburs\w*|payout|liab\w*|pay(s|ment)?|deadline|deductible|premium|fault|compensation|liable|refund|cost|costs)\b/.test(text))
           return 'The claims team assesses coverage, payment and policy terms. You can record what happened and send your documents here.';
         if (/\b(how (big|large)|how many (files?|photos?|attachments?|documents?)|file types?|size|limit|formats?|types? of files?|too large|mb|mib|jpeg|png|heic)\b/.test(text))
@@ -1013,7 +1190,7 @@
             ? 'Submitted answers are locked. The private link lets you check your receipt and add outstanding paperwork.'
             : 'You can correct imported details before confirming them. At Review, choose Edit beside an answer to change it before submitting.';
         if (/\b(policy (number|id)|find my policy)\b/.test(text))
-          return 'Look for the policy number on your insurance documents. You can save a draft while you look for it.';
+          return 'Look for the insurance number on your insurance documents. You can save a draft while you look for it.';
         if (/\b(injur\w*|hurt)\b/.test(text))
           return 'At the injury question, choose Yes, No or I don’t know. Choose I don’t know if you are unsure.';
         if (/\b(pdf|import|extract\w*)\b/.test(text) && !/\b(later|missing|after|without|size|receipt)\b/.test(text) && !receipt)
@@ -1028,10 +1205,10 @@
               : 'All requested paperwork has been received. Your receipt lists the files already sent.';
           }
           if (/\b(what is|whats|what does|what counts as)\b/.test(text) && /\b(quote|estimate)\b/.test(text))
-            return 'An itemized repair quote is an estimate from the repairer that lists the work and its costs. You can send it later using the private link on your receipt.';
+            return 'An itemized repair quote lists the repair work and its costs. Upload it before submitting, or save your draft until you have it.';
           const paperwork = /\b(quotes?|estimates?|quotations?)\b/.test(text)
             ? 'the repair quote' : 'all the paperwork';
-          return 'You can submit before you have ' + paperwork + '. When you have the missing file, open the private link on your receipt and choose “Add documents to this claim”.';
+          return 'You need ' + paperwork + ' before submitting. Choose Save and continue later, then return to upload it.';
         }
         if (/\b(next|after submission|after (?:i |we )?submit|how (?:do i|to) (?:file|submit))\b/.test(text))
           return receipt
@@ -1121,23 +1298,35 @@
       let chatLog = [];
       let chatBusy = false;
       function drawChat(card) {
+        contactSummary(card,true);
         card.classList.add('aichat');
         if (!chatLog.length)
-          chatLog.push({ role: 'assistant', content: 'Hi, I\u2019m the Retakt claims assistant. Tell me what happened to your vehicle and I\u2019ll take care of the rest.' });
+          chatLog.push({ role: 'assistant', content: 'Hi, I\u2019m the Retakt claims assistant. How can I help with your claim?' });
         const thread = el('div', 'thread');
         thread.setAttribute('aria-live', 'polite');
-        for (const m of chatLog) thread.append(el('div', 'bubble ' + (m.role === 'user' ? 'me' : 'ai'), m.content));
+        const captured = el('dl', 'captured-facts');
+        for (const field of fields) if (values[field.key]) captured.append(el('dt', '', field.label), el('dd', '', labelValue(field)));
+        if (captured.children.length) card.append(captured);
+        const latest = [...chatLog].reverse().find(m => m.role === 'assistant');
+        if (latest) thread.append(el('div', 'bubble ai', latest.content));
+        if (chatLog.length > 1) {
+          const transcript = el('details', 'conversation-history');
+          transcript.append(el('summary', '', 'Conversation'));
+          for (const m of chatLog) transcript.append(el('div', 'bubble ' + (m.role === 'user' ? 'me' : 'ai'), m.content));
+          card.append(transcript);
+        }
         if (chatBusy) thread.append(el('div', 'bubble ai typing', '\u2026'));
         card.append(thread);
         const ready = fields.every((f) => values[f.key]);
         if (ready) {
           card.append(button('Continue: add documents', 'primary', () => setStep(docsStep)));
-        } else {
+        }
+        {
           const form = el('form', 'composer');
           const input = el('textarea');
           input.rows = 2;
           input.maxLength = 2000;
-          input.placeholder = 'Describe what happened\u2026';
+          input.placeholder = ready ? 'Correct a detail or ask a question…' : 'Tell me what happened…';
           input.setAttribute('aria-label', 'Your message');
           const send = el('button', 'btn primary', 'Send');
           send.type = 'submit';
@@ -1163,6 +1352,7 @@
             render(false);
           });
           card.append(form);
+          card.append(button('Attach a photo or PDF', 'quiet', () => setStep(welcomeStep)));
           if (chatLog.length > 1) card.append(button('Fill in the form instead', 'quiet', () => setStep(nextUnanswered())));
           if (!chatBusy) setTimeout(() => input.focus({ preventScroll: true }), 0);
         }
@@ -1500,8 +1690,8 @@
       function drawDocuments(card) {
         heading(
           card,
-          'Which documents can you attach?',
-          'You can submit now and use your private link to add missing paperwork later.'
+          'Upload your documents',
+          'Add your incident report and itemized repair quote before submitting. Not ready? Save and continue later.'
         );
         if (demoCase) sampleQuotes(card);
         checklist(card, files);
@@ -1509,11 +1699,12 @@
         uploadControls(card, files);
         const actions = el('div', 'actions');
         actions.append(
-          button('Review claim', 'primary', () => setStep(reviewStep)),
+          button('Review claim', 'primary', () => { if (!missingRequiredDocuments().length) setStep(reviewStep); }),
           button('Back', 'quiet', () =>
             setStep(editing ? reviewStep : fields.length - 1)
           )
         );
+        actions.firstElementChild.disabled = missingRequiredDocuments().length > 0;
         card.append(actions);
       }
 
@@ -1528,12 +1719,13 @@
       function drawReview(card) {
         heading(
           card,
-          'Ready to submit your claim?',
-          'Check your answers and attachments. Submitting sends them to the claims team.'
+          recordedView ? 'Your claim' : 'Ready to submit your claim?',
+          'Check your details and documents before sending to the claims team.'
         );
+        contactSummary(card,true);
         const list = el('dl', 'review');
         fields.forEach((field, i) => {
-          const item = row(field.label, labelValue(field), () =>
+          const item = row(field.label, labelValue(field) || 'Still needed', () =>
             setStep(i, true)
           );
           item
@@ -1560,7 +1752,11 @@
         quotes.forEach((doc, i) => showQuote(card, doc.assessment, i === quotes.length - 1));
         showNotes(card, files, values.incident_date);
         const actions = el('div', 'actions');
-        actions.append(button('Submit claim', 'primary', submitClaim));
+        const submit = button(inPhone ? 'Send claim' : 'Submit claim', 'primary', submitClaim);
+        submit.disabled = missingRequiredDocuments().length > 0 || incompleteFields(values).length > 0;
+        actions.append(submit);
+        if (missingRequiredDocuments().length) actions.append(button('Upload missing documents', 'quiet', () => setStep(docsStep, true)));
+        if (incompleteFields(values).length) actions.append(el('p','file-hint','Complete the missing details before sending.'));
         card.append(actions);
       }
 
@@ -1575,33 +1771,17 @@
       }
 
       function persistDraft() {
-        const previousAnswer = fields[step]
-          ? values[fields[step].key] || partialAnswer
-          : '';
-        captureInput();
-        const draftValues = { ...values };
-        const draftSources = { ...sources };
-        if (step >= 0 && step < docsStep && fields[step].type !== 'choice') {
-          draftValues[fields[step].key] = partialAnswer;
-          if (partialAnswer !== previousAnswer)
-            delete draftSources[fields[step].key];
-        }
-        sendOperation('save-draft', {
-          token: privateToken(),
-          expected_revision: revision,
-          evidence_version: 1,
-          draft: {
-            ...(demoCase ? {demo_case: demoCase} : {}),
-            values: draftValues,
-            notes: attachmentNotes(files),
-            documents: files.map(attachmentBody),
-            sources: draftSources,
-            step
-          }
-        });
+        sendOperation('save-draft', {token:privateToken(), expected_revision:revision,
+          evidence_version:1, draft:draftSnapshot()});
+      }
+
+      function missingRequiredDocuments() {
+        return requiredKinds.filter(kind => !(kind === 'incident_report' && demoCase === 'DEV-003') && !files.some(doc => doc.kind === kind));
       }
 
       function submitClaim() {
+        if (incompleteFields(values).length) { setStep(nextUnanswered()); return; }
+        if (missingRequiredDocuments().length) { setStep(docsStep); return; }
         if (!requestId) requestId = uid();
         sendOperation('submit', {
           token: privateToken(),
@@ -1615,8 +1795,11 @@
 
       async function sendOperation(path, body) {
         if (busy) return;
-        pending = { path, body };
+        clearTimeout(draftTimer);
         setBusy(true);
+        if (draftSave) await draftSave;
+        if ('expected_revision' in body) body = {...body, expected_revision:revision};
+        pending = { path, body };
         status('Sending…');
         try {
           const data = await api(path, body);
@@ -1625,15 +1808,18 @@
               throw new Error('Incomplete draft receipt.');
             revision = data.revision;
             saveNotice = true;
+            savedDraftFingerprint = JSON.stringify(body.draft);
+            recordClaim(body.draft);
             history.replaceState(null, '', privateURL());
           } else {
-            acceptReceipt(data);
+            acceptReceipt(data, path === 'submit');
             history.replaceState(null, '', privateURL());
           }
           pending = null;
           conflict = false;
           render(path !== 'save-draft');
-          status(path === 'save-draft' ? 'Draft saved.' : 'Receipt updated.');
+          status(path === 'save-draft' ? (inPhone ? 'Saved in My claims.' : 'Draft saved.') : 'Receipt updated.');
+          if (inPhone && path === 'save-draft') window.parent.postMessage({type:'retakt:show-claims'},location.origin);
         } catch (err) {
           if ([400, 404, 409, 413, 415, 422].includes(err.status)) {
             pending = null;
@@ -1650,7 +1836,7 @@
         }
       }
 
-      function acceptReceipt(data) {
+      function acceptReceipt(data, justSubmitted = false) {
         if (
           data.status !== 'submitted' ||
           typeof data.reference !== 'string' ||
@@ -1659,6 +1845,15 @@
           data.documents.length !== data.document_count
         )
           throw new Error('Could not confirm the receipt.');
+        clearTimeout(draftTimer);
+        if (justSubmitted && inPhone && profileStore) {
+          try {customerContact=profileStore.save({...customerContact,email:values.email,insurance_number:values.policy_number});} catch { /* The claim receipt still records the details. */ }
+        }
+        if (Object.keys(values).length) submittedValues = {...values};
+        else if (inPhone) {
+          try {submittedValues = JSON.parse(localStorage.getItem('retakt.private-claims.v1') || '[]').find(claim=>claim.token===token)?.values || {};} catch {submittedValues={};}
+        }
+        recordClaim(null,data,justSubmitted);
         values = {};
         files = [];
         sources = {};
@@ -1672,6 +1867,20 @@
       }
 
       function drawReceipt(card) {
+        if (inPhone) {
+          heading(card,'Claim sent','Submitted claims are read-only.');
+          card.append(el('p','reference',receipt.reference));
+          contactSummary(card,false);
+          const list=el('dl','review');
+          fields.filter(field=>submittedValues[field.key]).forEach(field=>list.append(row(field.label,
+            field.type==='choice'?injuries[submittedValues[field.key]]:submittedValues[field.key])));
+          if (list.children.length) card.append(list);
+          card.append(el('h3','','Documents sent ('+receipt.document_count+')'));
+          fileList(card,receipt.documents,false);
+          card.append(el('p','help','The claims team has received your report.'));
+          card.append(button('Back to My claims','quiet',()=>window.parent.postMessage({type:'retakt:show-claims'},location.origin)));
+          return;
+        }
         heading(
           card,
           'Claim received',
@@ -1916,6 +2125,7 @@
       }
 
       function fresh() {
+        clearTimeout(draftTimer); savedDraftFingerprint=''; draftSaveError=''; submittedValues={};
         garageRequest = null;
         history.replaceState(null, '', location.pathname);
         demoCase = null;
@@ -1927,13 +2137,16 @@
         files = [];
         receipt = pending = importFile = importResult = null;
         conflict = false;
-        setStep(startStep);
+        customerContact={};profileReviewed=false;profileReturnStep=startStep;
+        notifyProfileReview();
+        setStep(inPhone && profileStore?.hasDetails()?profileStep:startStep);
       }
 
       async function resume() {
         setBusy(true);
-        status('Opening private link…');
+        status(inPhone ? 'Opening your claim…' : 'Opening private link…');
         try {
+          if (inPhone) {try {customerContact=JSON.parse(localStorage.getItem('retakt.private-claims.v1') || '[]').find(claim=>claim.token===token)?.contact || {};} catch {customerContact={};}}
           const data = await api('resume', { token, evidence_version: 1 });
           if (data.status === 'submitted') acceptReceipt(data);
           else if (
@@ -1949,10 +2162,12 @@
             restoreNotes(files, draft.notes);
             demoCase = draft.demo_case || null;
             await Promise.all(files.filter((doc) => doc.kind === 'itemized_quote').map(assessQuote));
+            savedDraftFingerprint=JSON.stringify(draft);
+            recordClaim(draft);
             step = draft.step;
             partialAnswer = '';
             if (
-              step >= 0 &&
+              !recordedView && step >= 0 &&
               step < docsStep &&
               fields[step].type !== 'choice'
             ) {
@@ -1965,6 +2180,7 @@
               (step >= docsStep && nextUnanswered() < docsStep)
             )
               step = nextUnanswered();
+            if (recordedView) step=reviewStep;
             receipt = null;
           } else throw new Error('Invalid draft receipt.');
           conflict = false;
@@ -1981,9 +2197,9 @@
           const card = el('div', 'card');
           heading(
             card,
-            'Couldn’t open this private link',
+            inPhone ? 'Couldn’t open your claim' : 'Couldn’t open this private link',
             error.status === 404
-              ? 'Check that you copied the complete link.'
+              ? (inPhone ? 'This saved claim could not be found.' : 'Check that you copied the complete link.')
               : 'Check your connection and try again.'
           );
           card.append(
@@ -2021,6 +2237,7 @@
           if (conflict)
             card.append(button('Open latest saved version', 'primary', resume));
         } else if (receipt) drawReceipt(card);
+        else if (step === profileStep) drawProfileReview(card);
         else if (step === chatStep) drawChat(card);
         else if (step === welcomeStep) drawWelcome(card);
         else if (step === importStep && importResult?.image) drawImageImport(card);
@@ -2032,25 +2249,71 @@
         error.setAttribute('role', 'alert');
         error.hidden = true;
         card.append(error);
-        if (!pending && !conflict) {
+        if (!pending && !conflict && step !== profileStep && !(inPhone && receipt)) {
           const ask = button('Ask a question', 'quiet ask-link', () =>
             openFilingHelp(current.querySelector('#answer') || ask)
           );
           card.append(ask);
         }
-        if (!pending && !conflict && step >= 0 && !receipt) {
+        if (!pending && !conflict && (step >= 0 || (step === chatStep && Object.keys(values).length)) && !receipt) {
           const save = el('div', 'save-bar');
           save.append(button('Save and continue later', 'quiet', saveDraft));
-          if (saveNotice) linkPanel(save, 'Draft saved · private resume link');
+          if (saveNotice) {
+            if (inPhone) save.append(el('p','file-hint','Saved in My claims.'));
+            else linkPanel(save, 'Draft saved · private resume link');
+          }
           card.append(save);
         }
+        if (draftSaveError) showError(draftSaveError);
+        scheduleDraftSave();
         if (focus) {
           card.querySelector('h2')?.focus({ preventScroll: true });
           card.scrollIntoView({ block: 'nearest' });
         }
       }
 
+      current.addEventListener('input', scheduleDraftSave);
+      current.addEventListener('change', scheduleDraftSave);
+      window.addEventListener('message', async (event) => {
+        if (inPhone && event.source===window.parent && event.origin===location.origin) {
+          if (event.data?.type==='retakt:review-profile') {openProfileReview();return;}
+          if (event.data?.type==='retakt:profile-available' && !profileReviewed && !token && !values.description && !files.length) {openProfileReview();return;}
+        }
+        if (inPhone && event.source === window.parent && event.origin === location.origin && event.data?.type === 'retakt:save-failed') {
+          showError('Your latest changes are not saved yet. Please try Save and continue later.');
+          return;
+        }
+        if (inPhone && event.source === window.parent && event.origin === location.origin &&
+            event.data?.type === 'retakt:save-current-claim' && typeof event.data.requestId === 'string') {
+          const ok=await flushRecordedClaim();
+          window.parent.postMessage({type:'retakt:claim-saved',requestId:event.data.requestId,ok},location.origin);
+          return;
+        }
+        if (window.parent !== window && event.source === window.parent && event.origin === location.origin &&
+            event.data?.type === 'retakt:voice-partial-details' && !busy && !pending && !receipt && !conflict) {
+          if (typeof event.data.values?.name==='string') customerContact.name=event.data.values.name.trim().slice(0,160);
+          for (const {key} of fields) if (typeof event.data.values?.[key] === 'string' && event.data.values[key].trim()) {
+            values[key] = event.data.values[key].trim(); delete sources[key];
+          }
+          const missing = fields.find(field => !values[field.key]);
+          chatLog.push({role: 'assistant', content: missing ? missing.prompt : 'Your details are ready. Add your documents when you’re ready.'});
+          setStep(missing ? chatStep : docsStep);
+          return;
+        }
+        if (window.parent === window || event.source !== window.parent || event.origin !== location.origin ||
+            event.data?.type !== 'retakt:voice-details' || typeof event.data.requestId !== 'string') return;
+        const reply = (status) => window.parent.postMessage({type: 'retakt:voice-details-ready', requestId: event.data.requestId, status}, location.origin);
+        if (busy || pending || receipt || conflict) return reply('blocked');
+        if (profileStore && event.data.contact) customerContact=profileStore.clean(event.data.contact);
+        const incoming = event.data.values;
+        if (!incoming || !fields.every(({key}) => typeof incoming[key] === 'string' && incoming[key].trim())) return reply('invalid');
+        for (const {key} of fields) { values[key] = incoming[key].trim(); delete sources[key]; }
+        chatLog.push({role: 'assistant', content: 'Your call details are ready. Add your documents, then review and submit your claim.'});
+        setStep(docsStep);
+        reply('ready');
+      });
       window.addEventListener('hashchange', () => location.reload());
+      if (inPhone && !location.hash) {notifyProfileReview();if (profileStore?.hasDetails()) step=profileStep;}
       render(false);
       if (location.hash) {
         const match = /^#claim=([0-9a-f]{64})$/.exec(location.hash);

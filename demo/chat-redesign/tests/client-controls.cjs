@@ -1,0 +1,42 @@
+const assert=require('node:assert/strict'), fs=require('node:fs'), vm=require('node:vm');
+const source=fs.readFileSync('demo/chat-redesign/client.js','utf8').replace("import('https://esm.sh/@elevenlabs/client@1.35.0')",'loadSDK()');
+function setup(profile=null){
+ const nodes=new Map(),listeners={},storage=new Map();let stops=0,starts=0,ends=0,callbacks;const mutes=[];
+ const el=()=>({hidden:false,disabled:false,textContent:'',children:[],classList:{toggle(){},remove(){}},setAttribute(){},replaceChildren(...x){this.children=x},append(...x){this.children.push(...x)},addEventListener(){},showModal(){this.open=true},close(){this.open=false},focus(){},scrollIntoView(){},contentWindow:{}});
+ const get=id=>{if(!nodes.has(id))nodes.set(id,el());return nodes.get(id)};
+ const ctx={document:{getElementById:get,createElement:el,body:{dataset:{voiceAgent:'public-test-agent'}}},window:{addEventListener:(name,fn)=>listeners[name]=fn},location:{origin:'http://localhost:8090'},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},navigator:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[{stop(){stops++}}]})}},crypto:require('node:crypto').webcrypto,clearTimeout,setTimeout:(fn,ms)=>{const t=setTimeout(fn,ms);t.unref();return t},URL,console,loadSDK:async()=>({Conversation:{startSession:async opts=>{starts++;callbacks=opts;opts.onConnect();return{endSession:async()=>{ends++},setMicMuted:value=>mutes.push(value)}}}})};
+ if(profile)ctx.window.RetaktProfile={read:()=>profile,hasDetails:()=>true,clean:p=>p};
+ vm.createContext(ctx);vm.runInContext(source,ctx);
+ for(const id of ['claim-flow','claim-detail']) get(id).contentWindow.postMessage=(data,origin)=>{if(data.type==='retakt:save-current-claim')listeners.message({origin,source:get(id).contentWindow,data:{type:'retakt:claim-saved',requestId:data.requestId,ok:true}})};
+ return{ctx,get,listeners,counts:()=>({stops,starts,ends,mutes}),callbacks:()=>callbacks};
+}
+(async()=>{
+ const a=setup();await a.get('start-call').onclick();assert.equal(a.counts().starts,1);assert.equal(a.counts().stops,1);a.get('mute-call').onclick();a.get('mute-call').onclick();assert.deepEqual(a.counts().mutes,[true,false]);a.callbacks().onMessage({message:'Hello',source:'agent'});assert.equal(a.get('transcript-panel').hidden,false);assert.ok(!a.get('transcript-panel').open);await a.get('start-call').onclick();assert.equal(a.counts().starts,1);await a.get('end-call').onclick();assert.equal(a.counts().ends,1);assert.equal(a.get('start-call').hidden,false);assert.equal(a.get('transcript-panel').hidden,true);assert.equal(a.get('live-controls').hidden,true);
+ let received;
+ a.get('claim-flow').contentWindow.postMessage=(data,origin)=>{received=data;a.listeners.message({origin,source:a.get('claim-flow').contentWindow,data:{type:'retakt:voice-details-ready',requestId:data.requestId,status:'ready'}})};
+ a.callbacks().clientTools.update_phone_claim_details({name:'Ana'});a.callbacks().clientTools.update_phone_claim_details({name:'Anna'});assert.ok(a.get('call-facts').children.some(n=>n.textContent==='Anna'));
+ const values={description:'Fictional parked car bumper damage.',incident_date:'2026-11-07',location:'Fictional Demo Street, Munich',insurance_number:'PHONE-TEST-42',email:'phone-test@example.org',injury_status:'no'};
+ const transferred=JSON.parse(await a.callbacks().clientTools.prepare_claim_in_phone(values));assert.equal(transferred.status,'ready');assert.equal(received.values.policy_number,'PHONE-TEST-42');assert.equal(a.get('use-chat').textContent,'Continue to documents');
+ const rejected=JSON.parse(await a.callbacks().clientTools.prepare_claim_in_phone({...values,incident_date:'2099-01-01'}));assert.ok(rejected.error);
+ const b=setup();let resolvePermission;b.ctx.navigator.mediaDevices.getUserMedia=()=>new Promise(r=>resolvePermission=r);const pending=b.get('start-call').onclick();await b.get('end-call').onclick();let cancelledStops=0;resolvePermission({getTracks:()=>[{stop:()=>cancelledStops++}]});await pending;assert.equal(cancelledStops,1);assert.equal(b.counts().starts,0);
+ const c=setup();c.ctx.navigator.mediaDevices.getUserMedia=async()=>{const e=new Error();e.name='NotAllowedError';throw e};await c.get('start-call').onclick();assert.equal(c.get('call-error').hidden,false);assert.match(c.get('call-error').textContent,/not allowed/);assert.equal(c.counts().starts,0);
+ const d=setup(), token='a'.repeat(64), receipt={type:'retakt:claim-receipt',reference:'CLM-test',token};
+ d.listeners.message({origin:'https://attacker.invalid',source:d.get('claim-flow').contentWindow,data:receipt});await d.get('tab-claims').onclick();assert.equal(d.get('claims-list').children.some(n=>n.className==='list'),false);
+ d.listeners.message({origin:'http://localhost:8090',source:d.get('claim-flow').contentWindow,data:receipt});await d.get('tab-claims').onclick();assert.equal(d.get('claims-list').children.find(n=>n.className==='list').children.length,1);
+ const draftToken='b'.repeat(64),draft={type:'retakt:claim-record',status:'draft',token:draftToken,title:'Scraped bumper',missing_documents:['itemized_quote'],ready:false};
+ d.listeners.message({origin:'http://localhost:8090',source:d.get('claim-flow').contentWindow,data:draft});
+ let draftCard=d.get('claims-list').children.find(n=>n.className==='list').children[0];
+ assert.equal(draftCard.children.find(n=>n.className==='claim-actions').children[1].disabled,true);
+ d.listeners.message({origin:'http://localhost:8090',source:d.get('claim-detail').contentWindow,data:{...draft,ready:true,missing_documents:[]}});
+ draftCard=d.get('claims-list').children.find(n=>n.className==='list').children[0];
+ assert.equal(draftCard.children.find(n=>n.className==='claim-actions').children[1].disabled,false);
+ d.listeners.message({origin:'http://localhost:8090',source:d.get('claim-detail').contentWindow,data:{...receipt,token:draftToken,just_submitted:true}});
+ d.listeners.message({origin:'http://localhost:8090',source:d.get('claim-flow').contentWindow,data:draft});
+ const lists=d.get('claims-list').children.filter(n=>n.className==='list');assert.equal(lists.length,1);assert.equal(lists[0].children.length,2);
+ for(const card of lists[0].children) assert.equal(card.children.find(n=>n.className==='claim-actions').children.length,1);
+ assert.ok(!JSON.stringify(d.get('claims-list').children).includes('private-link'));
+ const profile={name:'Fictional Caller',email:'caller@example.org',insurance_number:'SAVED-VOICE-42'},p=setup(profile);let reviewRequest;
+ p.get('claim-flow').contentWindow.postMessage=data=>{reviewRequest=data};await p.get('start-call').onclick();assert.equal(p.counts().starts,0);assert.equal(reviewRequest.type,'retakt:review-profile');
+ p.listeners.message({origin:'http://localhost:8090',source:p.get('claim-flow').contentWindow,data:{type:'retakt:profile-confirmed',profile}});await p.get('start-call').onclick();assert.equal(p.counts().starts,1);assert.equal(JSON.parse(p.callbacks().dynamicVariables.saved_customer_details).insurance_number,'SAVED-VOICE-42');await p.get('end-call').onclick();
+ console.log('Passed: call starts once, mute/unmute works, idle transcript collapses, name corrections update, end releases call, cancel releases late microphone, denial recovers, voice details reach document review, invalid dates are rejected, only trusted frames update My claims, missing documents disable sending, and late drafts cannot unlock submitted claims, and voice reuse requires the customer to review their saved profile.');
+})().catch(e=>{console.error(e);process.exitCode=1});

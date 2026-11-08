@@ -7,7 +7,7 @@ import json
 from uuid import uuid4
 
 from engine import assess_v1, decision_summary
-from .intake import UUID_V4, validate_intake
+from .intake import UUID_V4, validate_submission
 from .intake_links import _documents, _draft, _key, _revision, append_documents
 from .quote_evidence import assess_quote, demo_facts
 from .store import RequestError
@@ -24,7 +24,9 @@ def _with_notes(packet, draft=False):
     if not isinstance(packet, dict):
         raise RequestError(400, 'Invalid claim packet.')
     base = {k: v for k, v in packet.items() if k not in ('notes', 'demo_case')}
-    clean = _draft(base, enhanced=True) if draft else validate_intake(base, enhanced=True)
+    clean = _draft(base, enhanced=True) if draft else validate_submission(
+        base, enhanced=True, report_on_file=packet.get('demo_case') == 'DEV-003'
+    )
     if 'demo_case' in packet:
         if packet['demo_case'] != 'DEV-003':
             raise RequestError(400, 'Unknown fictional case.')

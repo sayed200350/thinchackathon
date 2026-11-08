@@ -12,7 +12,7 @@ import sys
 from urllib.parse import unquote, urlsplit
 
 from .chat import answer
-from .intake import EVIDENCE_FILE_REQUEST_LIMIT, initialize_intakes, validate_intake
+from .intake import EVIDENCE_FILE_REQUEST_LIMIT, initialize_intakes, validate_submission
 from .intake_links import append_documents, initialize_intake_links, resolve_link, save_draft, submit_linked
 from .intake_pdf import extract_pdf
 from .quote_evidence import assess_quote, demo_replay, QUOTE_EXAMPLES
@@ -202,7 +202,7 @@ class Handler(BaseHTTPRequestHandler):
                     return 200, submit_linked(store, token, body.get("payload"), body.get("expected_revision"))
                 return 200, append_documents(store, token, body.get("request_id"), body.get("documents"))
             if self.command == "POST" and parts == ["api", "intakes"]:
-                payload = validate_intake(self.read_json(INTAKE_REQUEST_LIMIT))
+                payload = validate_submission(self.read_json(INTAKE_REQUEST_LIMIT))
                 return 200, store.save_intake(payload)
             if self.command == "GET":
                 if parts == ["api", "claims"]:

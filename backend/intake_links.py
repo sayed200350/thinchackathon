@@ -156,7 +156,8 @@ def resolve_link(store, token):
 def submit_linked(store, token, payload, expected_revision=0):
     key = _key(token)
     _revision(expected_revision)
-    normalized = validate_intake(payload)
+    from .intake import validate_submission
+    normalized = validate_submission(payload)
     if not isinstance(store, sqlite3.Connection):
         return _rpc(store, 'submit', token, {'payload': normalized, 'expected_revision': expected_revision})
 
