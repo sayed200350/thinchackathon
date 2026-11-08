@@ -143,7 +143,9 @@ class Handler(BaseHTTPRequestHandler):
             upstream = self.judge_backend
         if self.judge_backend and self.command == "GET" and target.path == "/examples/quotes/itemized-1300.pdf":
             upstream = self.judge_backend
-        if target.path.startswith("/api/intakes/") and self.intake_backend:
+        # Claim reports and the staff inbox that lists them live in the intake backend.
+        if self.intake_backend and (target.path.startswith(("/api/intakes/", "/api/staff/"))
+                                    or target.path in ("/api/evidence/reviewer", "/api/evidence/document")):
             upstream = self.intake_backend
         local = self.local_file()
         if local:
