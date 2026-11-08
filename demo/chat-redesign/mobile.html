@@ -154,5 +154,22 @@
     }
     addEventListener('resize', resize); resize(); tick(); setInterval(tick, 20000);
   </script>
+  <script>
+    /* Pitch-Einbettung: Pfeil-/Blaettertasten an die einbettende Praesentation weiterreichen (nicht beim Tippen) */
+    (() => {
+      if (window.parent === window) return;
+      const KEYS = ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'];
+      const fwd = e => {
+        const t = e.target, tag = t && t.tagName;
+        if (!KEYS.includes(e.key) || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+        e.preventDefault(); window.parent.postMessage({ type: 'retakt-key', key: e.key }, '*');
+      };
+      addEventListener('keydown', fwd);
+      const f = document.getElementById('frame');
+      const hook = () => { try { f.contentWindow.addEventListener('keydown', fwd); } catch (_) {} };
+      f.addEventListener('load', hook); hook();
+    })();
+  </script>
 </body>
 </html>
